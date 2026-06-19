@@ -44,6 +44,17 @@ db.exec(`
     meta_json TEXT DEFAULT '{}',
     FOREIGN KEY (game_id) REFERENCES games(id)
   );
+
+  CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    url TEXT NOT NULL,
+    mimetype TEXT,
+    size INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 module.exports = db;

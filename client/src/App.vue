@@ -5,6 +5,7 @@
         <router-link to="/" class="logo">Gamer Beta</router-link>
         <div class="nav-links">
           <router-link to="/create" class="nav-btn create-btn">+ Create</router-link>
+          <router-link v-if="auth.isLoggedIn" to="/assets" class="nav-btn">Materials</router-link>
           <template v-if="auth.isLoggedIn">
             <span class="nav-user">{{ auth.user?.nickname }}</span>
             <button @click="handleLogout" class="nav-btn">Logout</button>

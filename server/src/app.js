@@ -7,6 +7,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const gameRoutes = require('./routes/games');
 const uploadRoutes = require('./routes/upload');
+const assetRoutes = require('./routes/assets');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,9 +21,10 @@ app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './upl
 app.use('/api/auth', authRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/assets', assetRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ name: 'Gamer Beta API', version: '1.0', endpoints: ['/api/auth', '/api/games', '/api/upload', '/api/health'] });
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Gamer Beta</title></head><body style="background:#0f172a;color:#f1f5f9;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div><h1>Gamer Beta API v1.0</h1><p>Frontend at <a href="http://localhost:5173" style="color:#6366f1">localhost:5173</a></p></div></body></html>`);
 });
 
 app.get('/api/health', (req, res) => {
