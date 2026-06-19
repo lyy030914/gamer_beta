@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Snake Boost</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vmin;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            background: #111;
+            border: 3px solid #00ff88;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #0d0d0d;
+        }
+        #uiOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px 12px;
+        }
+        #topBar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+        #scoreDisplay {
+            color: #fff;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #00ff88;
+        }
+        #highScoreDisplay {
+            color: #ffaa00;
+            font-size: 1rem;
+            text-shadow: 0 0 8px #ffaa00;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #ffaa00;
+        }
+        #powerUpIndicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 1.4rem;
+            font-weight: bold;
+            text-shadow: 0 0 15px currentColor;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 16px;
+            border-radius: 12px;
+            border: 2px solid currentColor;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        #powerUpIndicator.show {
+            opacity: 1;
+        }
+        #timerBarContainer {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            height: 8px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 4px;
+            overflow: hidden;
+            pointer-events: none;
+            display: none;
+        }
+        #timerBar {
+            height: 100%;
+            width: 0%;
+            background: #00ff88;
+            border-radius: 4px;
+            transition: width 0.1s linear;
+        }
+        #controlsInfo {
+            color: rgba(255,255,255,0.5);
+            font-size: 0.7rem;
+            text-align: center;
+            pointer-events: none;
+            padding-bottom: 4px;
+        }
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.85);
+            pointer-events: auto;
+            padding: 20px;
+            text-align: center;
+        }
+        #gameOverScreen {
+            display: none;
+        }
+        h1 {
+            color: #00ff88;
+            font-size: 2.8rem;
+            text-shadow: 0 0 20px #00ff88, 0 0 40px #00ff88;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+        .subtitle {
+            color: #aaa;
+            font-size: 1rem;
+            margin-bottom: 30px;
+        }
+        .btn {
+            background: transparent;
+            color: #00ff88;
+            border: 2px solid #00ff88;
+            padding: 12px 40px;
+            font-size: 1.3rem;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s;
+            margin: 6px;
+            text-shadow: 0 0 8px #00ff88;
+            box-shadow: 0 0 15px rgba(0,255,136,0.2);
+        }
+        .btn:hover {
+            background: #00ff88;
+            color: #000;
+            box-shadow: 0 0 30px #00ff88;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .controls-text {
+            color: #888;
+            font-size: 0.85rem;
+            margin-top: 25px;
+            line-height: 1.6;
+        }
+        .controls-text span {
+            color: #00ff88;
+        }
+        #finalScore {
+            color: #fff;
+            font-size: 2rem;
+            margin: 10px 0;
+        }
+        #finalHighScore {
+            color: #ffaa00;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 500px) {
+            #scoreDisplay { font-size: 1rem; }
+            #highScoreDisplay { font-size: 0.8rem; }
+            h1 { font-size: 2rem; }
+            .btn { padding: 10px 30px; font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    <div id="uiOverlay">
+        <div id="topBar">
+            <div id="scoreDisplay">Score: 0</div>
+            <div id="highScoreDisplay">Best: 0</div>
+        </div>
+        <div id="powerUpIndicator"></div>
+        <div id="timerBarContainer"><div id="timerBar"></div></div>
+        <div id="controlsInfo">↑↓← → / WASD &nbsp;|&nbsp; Space to use power-up</div>
+    </div>
+    <div id="startScreen">
+        <h1>SNAKE BOOST</h1>
+        <div class="subtitle">Eat. Grow. Boost. Survive.</div>
+        <button class="btn" id="startBtn">▶ PLAY</button>
+        <div class="controls-text">
+            <span>Arrow Keys</span> or <span>WASD</span> to move<br>
+            <span>Space</span> to activate power-up<br>
+            <span>Swipe</span> to change direction · <span>Tap</span> to use boost
+        </div>
+    </div>
+    <div id="gameOverScreen">
+        <h1>GAME OVER</h1>
+        <div id="finalScore">Score: 0</div>
+        <div id="finalHighScore">Best: 0</div>
+        <button class="btn" id="restartBtn">↻ PLAY AGAIN</button>
+    </div>
+</div>
+<script>
+    (function() {
+        // ---------- CANVAS SETUP ----------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+
+        // Responsive canvas sizing
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            const size = Math.min(rect.width, rect.height);
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ---------- GAME CONFIG ----------
+        const GRID_SIZE = 20; // 20x20 grid
+        const CELL_SIZE = canvas.width / GRID_SIZE;
+        const TICK_INTERVAL = 150; // ms per game tick (base speed)
+
+        // ---------- GAME STATE ----------
+        let snake = [];
+        let food = { x: 8, y: 10 };
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('snakeBoostHighScore')) || 0;
+        let gameState = 'start'; // 'start', 'playing', 'gameover'
+        let gameLoopId = null;
+        let lastTickTime = 0;
+        let foodCount = 0; // how many food eaten (for power-up drops)
+        let powerUps = []; // active power-ups on field
+        let activeEffects = []; // { type, endTime, timerDuration }
+
+        // Power-up types
+        const POWERUP_TYPES = ['speed', 'multiplier', 'shield', 'slowdown', 'shrink'];
+        const POWERUP_COLORS = {
+            speed: '#4488ff',
+            multiplier: '#ffaa00',
+            shield: '#ffffff',
+            slowdown: '#aa44ff',
+            shrink: '#ff66aa'
+        };
+        const POWERUP_DURATIONS = {
+            speed: 5000,
+            multiplier: 10000,
+            shield: 5000,
+            slowdown: 5000,
+            shrink: 0 // instant
+        };
+        const POWERUP_ICONS = {
+            speed: '⚡',
+            multiplier: '×2',
+            shield: '🛡',
+            slowdown: '🐢',
+            shrink: '➖'
+        };
+
+        // Stored power-up (spacebar to use)
+        let storedPowerUp = null; // { type, duration }
+
+        // ---------- DOM REFS ----------
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const powerUpIndicator = document.getElementById('powerUpIndicator');
+        const timerBarContainer = document.getElementById('timerBarContainer');
+        const timerBar = document.getElementById('timerBar');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScore = document.getElementById('finalScore');
+        const finalHighScore = document.getElementById('finalHighScore');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // ---------- AUDIO (Web Audio) ----------
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        function playTone(freq, duration, type = 'square', volume = 0.15) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+        function playEat() { playTone(600, 0.1, 'square', 0.12); }
+        function playPowerUp() { playTone(800, 0.15, 'sine', 0.15); setTimeout(()=>playTone(1000,0.15,'sine',0.12),100); }
+        function playDeath() { playTone(200, 0.3, 'sawtooth', 0.15); setTimeout(()=>playTone(150,0.3,'sawtooth',0.1),150); }
+        function playShield() { playTone(900, 0.1, 'sine', 0.12); }
+        function playUsePower() { playTone(700, 0.1, 'triangle', 0.12); }
+
+        // ---------- HELPERS ----------
+        function randomGridPos() {
+            return {
+                x: Math.floor(Math.random() * GRID_SIZE),
+                y: Math.floor(Math.random() * GRID_SIZE)
+            };
+        }
+
+        function isOccupied(pos, includeSnake = true) {
+            if (includeSnake) {
+                for (let seg of snake) {
+                    if (seg.x === pos.x && seg.y === pos.y) return true;
+                }
+            }
+            // also check food and power-ups? ignore for simplicity, but avoid overlap
+            return false;
+        }
+
+        function spawnFood() {
+            let pos;
+            let attempts = 0;
+            do {
+                pos = randomGridPos();
+                attempts++;
+            } while (isOccupied(pos) && attempts < 100);
+            food = pos;
+        }
+
+        function spawnPowerUp() {
+            let pos;
+            let attempts = 0;
+            do {
+                pos = randomGridPos();
+                attempts++;
+            } while (isOccupied(pos) && attempts < 100);
+            const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+            powerUps.push({ x: pos.x, y: pos.y, type });
+        }
+
+        function getEffectiveTickInterval() {
+            let interval = TICK_INTERVAL;
+            for (let eff of activeEffects) {
+                if (eff.type === 'speed') interval = Math.max(60, interval * 0.6);
+                if (eff.type === 'slowdown') interval = Math.min(400, interval * 1.5);
+            }
+            return interval;
+        }
+
+        function getScoreMultiplier() {
+            for (let eff of activeEffects) {
+                if (eff.type === 'multiplier') return 2;
+            }
+            return 1;
+        }
+
+        function hasShield() {
+            for (let eff of activeEffects) {
+                if (eff.type === 'shield') return true;
+            }
+            return false;
+        }
+
+        // ---------- GAME INIT ----------
+        function initGame() {
+            // Snake: start at center, length 3, moving right
+            const startX = Math.floor(GRID_SIZE / 2);
+            const startY = Math.floor(GRID_SIZE / 2);
+            snake = [
+                { x: startX, y: startY },
+                { x: startX - 1, y: startY },
+                { x: startX - 2, y: startY }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            foodCount = 0;
+            powerUps = [];
+            activeEffects = [];
+            storedPowerUp = null;
+            spawnFood();
+            updateUI();
+            hidePowerUpIndicator();
+            timerBarContainer.style.display = 'none';
+        }
+
+        // ---------- UI UPDATE ----------
+        function updateUI() {
+            scoreDisplay.textContent = 'Score: ' + score;
+            highScoreDisplay.textContent = 'Best: ' + highScore;
+        }
+
+        function showPowerUpIndicator(text, color) {
+            powerUpIndicator.textContent = text;
+            powerUpIndicator.style.color = color;
+            powerUpIndicator.style.borderColor = color;
+            powerUpIndicator.classList.add('show');
+        }
+
+        function hidePowerUpIndicator() {
+            powerUpIndicator.classList.remove('show');
+        }
+
+        function updateTimerBar(remaining, total) {
+            if (total <= 0) { timerBarContainer.style.display = 'none'; return; }
+            timerBarContainer.style.display = 'block';
+            const pct = Math.max(0, (remaining / total) * 100);
+            timerBar.style.width = pct + '%';
+        }
+
+        // ---------- GAME LOGIC ----------
+        function tick() {
+            // Process direction change
+            direction = { ...nextDirection };
+
+            // Calculate new head
+            const head = snake[0];
+            const newHead = {
+                x: head.x + direction.x,
+                y: head.y + direction.y
+            };
+
+            // Check wall collision
+            if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE) {
+                gameOver();
+                return;
+            }
+
+            // Check self-collision (unless shielded)
+            let selfCollision = false;
+            for (let i = 0; i < snake.length; i++) {
+                if (snake[i].x === newHead.x && snake[i].y === newHead.y) {
+                    selfCollision = true;
+                    break;
+                }
+            }
+            if (selfCollision) {
+                if (hasShield()) {
+                    // Shield blocks self-collision, but we still don't move? Actually snake shouldn't go into itself.
+                    // Better: ignore the move and keep direction? Or just block? Let's block the move and keep direction same.
+                    // For simplicity, we just don't move and skip tick. But that could freeze. Let's instead treat it as invalid move: ignore input.
+                    // But we already changed direction. Let's revert direction to previous? Too complex. Instead, we just don't add the new head.
+                    // For shield, we allow passing through self? That's weird. Better: shield prevents death, but snake still can't occupy same cell.
+                    // So we treat it as invalid move and keep snake unchanged (skip tick effectively).
+                    // To avoid freeze, we just don't move. But then the game would stop. Let's instead just not add the head, and remove tail? That would shrink.
+                    // Actually simplest: just block the move and don't advance. But that means snake stops. Let's just allow the move but remove the overlapping segment? That's messy.
+                    // For simplicity and fun: Shield makes you invulnerable to self-collision: you can pass through yourself. So we allow the move.
+                    // But that means the snake overlaps itself visually. We'll allow it for shield duration.
+                    // We'll just add the head and not check self-collision.
+                } else {
+                    gameOver();
+                    return;
+                }
+            }
+
+            // Move snake: add new head
+            snake.unshift({ x: newHead.x, y: newHead.y });
+
+            // Check food
+            let ate = false;
+            if (newHead.x === food.x && newHead.y === food.y) {
+                ate = true;
+                const mult = getScoreMultiplier();
+                const points = 10 * mult;
+                score += points;
+                foodCount++;
+                playEat();
+                spawnFood();
+                // Power-up drop every 5 food
+                if (foodCount % 5 === 0) {
+                    spawnPowerUp();
+                    playPowerUp();
+                }
+            }
+
+            // Check power-up collection
+            let collectedPowerUp = null;
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                const pu = powerUps[i];
+                if (newHead.x === pu.x && newHead.y === pu.y) {
+                    collectedPowerUp = pu;
+                    powerUps.splice(i, 1);
+                    break;
+                }
+            }
+
+            if (collectedPowerUp) {
+                const type = collectedPowerUp.type;
+                if (type === 'shrink') {
+                    // Instantly shrink by 3 segments (if possible)
+                    for (let s = 0; s < 3; s++) {
+                        if (snake.length > 1) snake.pop();
+                    }
+                    playPowerUp();
+                } else {
+                    // Store power-up
+                    storedPowerUp = { type, duration: POWERUP_DURATIONS[type] };
+                    showPowerUpIndicator(POWERUP_ICONS[type] + ' ' + type.toUpperCase(), POWERUP_COLORS[type]);
+                    playPowerUp();
+                }
+            }
+
+            // If not ate, remove tail
+            if (!ate) {
+                snake.pop();
+            }
+
+            // Update active effects (remove expired)
+            const now = performance.now();
+            activeEffects = activeEffects.filter(eff => eff.endTime > now);
+
+            // Update stored power-up indicator if active
+            if (storedPowerUp) {
+                // already shown
+            } else {
+                hidePowerUpIndicator();
+            }
+
+            updateUI();
+        }
+
+        // ---------- GAME OVER ----------
+        function gameOver() {
+            if (gameState === 'gameover') return;
+            gameState = 'gameover';
+            playDeath();
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('snakeBoostHighScore', highScore);
+            }
+            finalScore.textContent = 'Score: ' + score;
+            finalHighScore.textContent = 'Best: ' + highScore;
+            gameOverScreen.style.display = 'flex';
+            updateUI();
+            if (gameLoopId) {
+                cancelAnimationFrame(gameLoopId);
+                gameLoopId = null;
+            }
+        }
+
+        // ---------- GAME LOOP ----------
+        function gameLoop(timestamp) {
+            if (gameState !== 'playing') return;
+
+            const tickInterval = getEffectiveTickInterval();
+            if (timestamp - lastTickTime >= tickInterval) {
+                lastTickTime = timestamp;
+                tick();
+                // Check if game over happened during tick
+                if (gameState === 'gameover') return;
+            }
+
+            // Update timer bar for active effects
+            const now = performance.now();
+            let activeEff = null;
+            let maxRemaining = 0;
+            let maxDuration = 0;
+            for (let eff of activeEffects) {
+                const remaining = eff.endTime - now;
+                if (remaining > maxRemaining) {
+                    maxRemaining = remaining;
+                    maxDuration = eff.timerDuration;
+                    activeEff = eff;
+                }
+            }
+            if (activeEff && maxRemaining > 0) {
+                updateTimerBar(maxRemaining, maxDuration);
+            } else {
+                timerBarContainer.style.display = 'none';
+            }
+
+            // Update stored power-up indicator
+            if (storedPowerUp) {
+                showPowerUpIndicator(POWERUP_ICONS[storedPowerUp.type] + ' ' + storedPowerUp.type.toUpperCase(), POWERUP_COLORS[storedPowerUp.type]);
+            } else {
+                hidePowerUpIndicator();
+            }
+
+            render();
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // ---------- RENDER ----------
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = '#1a1a2e';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_SIZE, 0);
+                ctx.lineTo(i * CELL_SIZE, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_SIZE);
+                ctx.lineTo(canvas.width, i * CELL_SIZE);
+                ctx.stroke();
+            }
+
+            // Draw food
+            ctx.fillStyle = '#ff3333';
+            ctx.shadowColor = '#ff3333';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(food.x * CELL_SIZE + CELL_SIZE/2, food.y * CELL_SIZE + CELL_SIZE/2, CELL_SIZE/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Draw power-ups
+            for (let pu of powerUps) {
+                ctx.fillStyle = POWERUP_COLORS[pu.type];
+                ctx.shadowColor = POWERUP_COLORS[pu.type];
+                ctx.shadowBlur = 20;
+                ctx.font = 'bold ' + (CELL_SIZE * 0.6) + 'px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(POWERUP_ICONS[pu.type], pu.x * CELL_SIZE + CELL_SIZE/2, pu.y * CELL_SIZE + CELL_SIZE/2);
+                // Draw glow circle behind
+                ctx.beginPath();
+                ctx.arc(pu.x * CELL_SIZE + CELL_SIZE/2, pu.y * CELL_SIZE + CELL_SIZE/2, CELL_SIZE/2 - 1, 0, Math.PI * 2);
+                ctx.strokeStyle = POWERUP_COLORS[pu.type];
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+
+            // Draw snake
+            for (let i = 0; i < snake.length; i++) {
+                const seg = snake[i];
+                const x = seg.x * CELL_SIZE;
+                const y = seg.y * CELL_SIZE;
+                const padding = 1;
+                // Gradient from head to tail
+                const intensity = 1 - (i / snake.length) * 0.6;
+                const r = Math.floor(0 + 80 * intensity);
+                const g = Math.floor(200 + 55 * intensity);
+                const b = Math.floor(50 + 30 * intensity);
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.shadowColor = '#00ff88';
+                ctx.shadowBlur = i === 0 ? 20 : 8;
+                ctx.fillRect(x + padding, y + padding, CELL_SIZE - padding*2, CELL_SIZE - padding*2);
+                // Head details
+                if (i === 0) {
+                    ctx.fillStyle = '#88ffbb';
+                    ctx.shadowBlur = 25;
+                    // Eyes
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowBlur = 0;
+                    const eyeSize = CELL_SIZE * 0.12;
+                    const eyeOff = CELL_SIZE * 0.25;
+                    ctx.beginPath();
+                    ctx.arc(x + CELL_SIZE/2 - eyeOff, y + CELL_SIZE/2 - eyeOff, eyeSize, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + CELL_SIZE/2 + eyeOff, y + CELL_SIZE/2 - eyeOff, eyeSize, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(x + CELL_SIZE/2 - eyeOff, y + CELL_SIZE/2 - eyeOff, eyeSize*0.5, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + CELL_SIZE/2 + eyeOff, y + CELL_SIZE/2 - eyeOff, eyeSize*0.5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+            ctx.shadowBlur = 0;
+
+            // Draw active effects indicator on snake (glow)
+            for (let eff of activeEffects) {
+                if (eff.type === 'shield') {
+                    // Draw shield glow around snake head
+                    const head = snake[0];
+                    if (head) {
+                        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                        ctx.lineWidth = 3;
+                        ctx.shadowColor = '#ffffff';
+                        ctx.shadowBlur = 30;
+                        ctx.beginPath();
+                        ctx.arc(head.x * CELL_SIZE + CELL_SIZE/2, head.y * CELL_SIZE + CELL_SIZE/2, CELL_SIZE * 0.8, 0, Math.PI*2);
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+            }
+
+            // Draw grid border glow
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 10;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+            ctx.shadowBlur = 0;
+        }
+
+        // ---------- INPUT HANDLING ----------
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (gameState === 'start') {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    startGame();
+                }
+                return;
+            }
+            if (gameState === 'gameover') {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    restartGame();
+                }
+                return;
+            }
+            if (gameState !== 'playing') return;
+
+            const key = e.key;
+            // Direction
+            let newDir = null;
+            if (key === 'ArrowUp' || key === 'w' || key === 'W') newDir = { x: 0, y: -1 };
+            else if (key === 'ArrowDown' || key === 's' || key === 'S') newDir = { x: 0, y: 1 };
+            else if (key === 'ArrowLeft' || key === 'a' || key === 'A') newDir = { x: -1, y: 0 };
+            else if (key === 'ArrowRight' || key === 'd' || key === 'D') newDir = { x: 1, y: 0 };
+            else if (key === ' ') {
+                e.preventDefault();
+                useStoredPowerUp();
+                return;
+            }
+
+            if (newDir) {
+                e.preventDefault();
+                // Prevent reverse
+                if (direction.x + newDir.x === 0 && direction.y + newDir.y === 0) {
+                    return;
+                }
+                nextDirection = newDir;
+            }
+        });
+
+        // Touch / swipe
+        let touchStartX = 0, touchStartY = 0;
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (gameState === 'start') {
+                startGame();
+                return;
+            }
+            if (gameState === 'gameover') {
+                restartGame();
+                return;
+            }
+            if (gameState !== 'playing') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.changedTouches[0];
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+
+            if (absDx < 10 && absDy < 10) {
+                // Tap -> use power-up
+                useStoredPowerUp();
+                return;
+            }
+
+            let newDir = null;
+            if (absDx > absDy) {
+                newDir = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
+            } else {
+                newDir = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
+            }
+
+            if (newDir) {
+                if (direction.x + newDir.x === 0 && direction.y + newDir.y === 0) {
+                    return;
+                }
+                nextDirection = newDir;
+            }
+        }, { passive: false });
+
+        // ---------- POWER-UP ACTIVATION ----------
+        function useStoredPowerUp() {
+            if (!storedPowerUp) return;
+            const type = storedPowerUp.type;
+            const duration = storedPowerUp.duration;
+            storedPowerUp = null;
+            hidePowerUpIndicator();
+
+            // Add effect
+            const endTime = performance.now() + duration;
+            activeEffects.push({ type, endTime, timerDuration: duration });
+            playUsePower();
+            if (type === 'shield') playShield();
+
+            // Show brief indicator
+            showPowerUpIndicator(POWERUP_ICONS[type] + ' ACTIVE!', POWERUP_COLORS[type]);
+            setTimeout(() => {
+                if (!storedPowerUp) hidePowerUpIndicator();
+            }, 1500);
+        }
+
+        // ---------- GAME START / RESTART ----------
+        function startGame() {
+            initAudio();
+            initGame();
+            gameState = 'playing';
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            lastTickTime = performance.now();
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function restartGame() {
+            gameOverScreen.style.display = 'none';
+            startGame();
+        }
+
+        // ---------- EVENT LISTENERS FOR BUTTONS ----------
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // ---------- INITIAL RENDER ----------
+        initGame();
+        render();
+        highScoreDisplay.textContent = 'Best: ' + highScore;
+
+        // Show start screen
+        startScreen.style.display = 'flex';
+        gameOverScreen.style.display = 'none';
+
+        // ---------- PREVENT SCROLLING ON TOUCH ----------
+        document.addEventListener('touchmove', (e) => {
+            if (e.target === canvas) e.preventDefault();
+        }, { passive: false });
+
+        // ---------- HANDLE VISIBILITY CHANGE ----------
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && gameState === 'playing') {
+                // Pause? We'll just keep running but might cause issues. For now, do nothing.
+            }
+        });
+
+        // ---------- RESIZE HANDLER ----------
+        window.addEventListener('resize', () => {
+            // Canvas size is handled by CSS, no need to redraw grid
+            // But we need to re-render
+            if (gameState === 'playing' || gameState === 'start') render();
+        });
+
+        console.log('Snake Boost loaded!');
+    })();
+</script>
+</body>
+</html>

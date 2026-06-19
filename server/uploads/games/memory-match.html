@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Match</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',sans-serif;overflow:hidden}
+.container{text-align:center}
+h1{color:#fff;margin-bottom:8px;font-size:24px;font-weight:700}
+.info{display:flex;justify-content:center;gap:30px;margin-bottom:14px}
+.info-item{color:#94a3b8;font-size:14px}
+.info-item span{color:#a855f7;font-weight:700;font-size:18px}
+.grid{display:grid;grid-template-columns:repeat(4,90px);gap:10px;justify-content:center}
+.card{width:90px;height:90px;border-radius:10px;cursor:pointer;position:relative;perspective:600px;transition:transform .15s}
+.card:hover{transform:scale(1.03)}
+.card-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .4s}
+.card.flipped .card-inner{transform:rotateY(180deg)}
+.card-front,.card-back{position:absolute;width:100%;height:100%;backface-visibility:hidden;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:36px}
+.card-back{background:linear-gradient(135deg,#6366f1,#a855f7);border:2px solid rgba(255,255,255,0.15)}
+.card-front{background:#1e293b;border:2px solid #334155;transform:rotateY(180deg);font-size:40px}
+.card.matched{pointer-events:none}
+.card.matched .card-front{background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4)}
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10}
+.overlay-card{background:#1e293b;border-radius:12px;padding:32px 40px;text-align:center;border:1px solid #334155}
+.overlay-card h2{color:#fff;font-size:22px;margin-bottom:8px}
+.overlay-card p{color:#94a3b8;margin-bottom:10px;font-size:14px}
+.overlay-card .big-num{color:#a855f7;font-size:36px;font-weight:800;margin-bottom:20px}
+.btn{background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .2s}
+.btn:hover{transform:scale(1.05)}
+.btn-sm{font-size:13px;padding:8px 20px;margin:0 4px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🃏 Memory Match</h1>
+<div class="info">
+<div class="info-item">Matches <span id="matches">0</span>/8</div>
+<div class="info-item">Moves <span id="moves">0</span></div>
+<div class="info-item">Best <span id="best">-</span></div>
+</div>
+<div class="grid" id="grid"></div>
+<div style="margin-top:16px">
+<button class="btn btn-sm" onclick="setDifficulty(8)" style="background:linear-gradient(135deg,#22c55e,#16a34a)">Easy</button>
+<button class="btn btn-sm" onclick="setDifficulty(12)" style="background:linear-gradient(135deg,#f59e0b,#d97706)">Medium</button>
+<button class="btn btn-sm" onclick="setDifficulty(16)" style="background:linear-gradient(135deg,#ef4444,#dc2626)">Hard</button>
+</div>
+</div>
+<div class="overlay" id="winOverlay" style="display:none">
+<div class="overlay-card">
+<h2>🎉 You Win!</h2>
+<div class="big-num" id="winMoves">0 moves</div>
+<button class="btn" onclick="restart()">Play Again</button>
+</div>
+</div>
+<script>
+const emojis=['🍎','🍊','🍋','🍌','🍉','🍇','🍓','🍒','🥝','🍑','🥭','🍍','🫐','🥥','🍈','🌽'];
+let cards=[],flipped=[],matched=new Set(),moves=0,pairCount=8,lock=false,bestMoves=null;
+bestMoves=JSON.parse(localStorage.getItem('memBest')||'{}');
+function setDifficulty(n){pairCount=n;restart()}
+function restart(){
+const grid=document.getElementById('grid');
+grid.style.gridTemplateColumns=`repeat(${pairCount<=8?4:pairCount<=12?4:4},90px)`;
+const selected=emojis.slice(0,pairCount);
+cards=[...selected,...selected].sort(()=>Math.random()-0.5);
+flipped=[];matched=new Set();moves=0;lock=false;
+document.getElementById('matches').textContent=0;document.getElementById('moves').textContent=0;
+document.getElementById('winOverlay').style.display='none';
+const best=bestMoves[pairCount];document.getElementById('best').textContent=best?`${best} moves`:'-';
+grid.innerHTML=cards.map((e,i)=>`
+<div class="card" onclick="flipCard(${i})" data-i="${i}">
+<div class="card-inner"><div class="card-back">?</div><div class="card-front">${e}</div></div>
+</div>
+`).join('')
+}
+function flipCard(i){if(lock||flipped.includes(i)||matched.has(i))return;
+document.querySelectorAll('.card')[i].classList.add('flipped');flipped.push(i);
+if(flipped.length===2){moves++;document.getElementById('moves').textContent=moves;lock=true;
+const[a,b]=flipped;
+if(cards[a]===cards[b]){matched.add(a);matched.add(b);document.getElementById('matches').textContent=matched.size/2;flipped=[];lock=false;
+if(matched.size===pairCount*2){const prev=bestMoves[pairCount];if(!prev||moves<prev){bestMoves[pairCount]=moves;localStorage.setItem('memBest',JSON.stringify(bestMoves));document.getElementById('best').textContent=`${moves} moves`}
+document.getElementById('winMoves').textContent=`${moves} moves`;setTimeout(()=>document.getElementById('winOverlay').style.display='flex',400)}
+}else{setTimeout(()=>{document.querySelectorAll('.card')[a].classList.remove('flipped');document.querySelectorAll('.card')[b].classList.remove('flipped');flipped=[];lock=false},600)}}
+}
+restart();
+</script>
+</body>
+</html>

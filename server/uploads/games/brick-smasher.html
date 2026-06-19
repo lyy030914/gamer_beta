@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brick Smasher</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Segoe UI',sans-serif;overflow:hidden}
+.container{text-align:center}
+h1{color:#fff;margin-bottom:8px;font-size:24px;font-weight:700}
+.info{display:flex;justify-content:center;gap:30px;margin-bottom:10px}
+.info-item{color:#94a3b8;font-size:14px}
+.info-item span{color:#f59e0b;font-weight:700;font-size:18px}
+canvas{border:2px solid #334155;border-radius:8px;background:#1e293b;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10}
+.card{background:#1e293b;border-radius:12px;padding:32px 40px;text-align:center;border:1px solid #334155}
+.card h2{color:#fff;font-size:22px;margin-bottom:8px}
+.card p{color:#94a3b8;margin-bottom:16px;font-size:14px}
+.card .big-num{color:#f59e0b;font-size:36px;font-weight:800;margin-bottom:20px}
+.btn{background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .2s}
+.btn:hover{transform:scale(1.05)}
+.tip{color:#64748b;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🧱 Brick Smasher</h1>
+<div class="info">
+<div class="info-item">Score <span id="score">0</span></div>
+<div class="info-item">Lives <span id="lives">3</span></div>
+<div class="info-item">Level <span id="level">1</span></div>
+</div>
+<canvas id="c"></canvas>
+<p class="tip">Move: &#11013;&#65039;&#10145;&#65039; / A D &nbsp;|&nbsp;Launch: Space / Click</p>
+</div>
+<div class="overlay" id="startOverlay">
+<div class="card">
+<h2>🧱 Brick Smasher</h2>
+<p>Break all bricks! Clear levels and climb the leaderboard.</p>
+<button class="btn" onclick="startGame()">Start Game</button>
+</div>
+</div>
+<div class="overlay" id="overOverlay" style="display:none">
+<div class="card">
+<h2 id="overTitle">Game Over!</h2>
+<div class="big-num" id="finalScore">0</div>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=480,H=600;c.width=W;c.height=H;
+let paddle={w:90,h:14,x:0,y:H-40},ball,balls,bricks=[],score,lives,level,loop,gameStarted,particles=[],best;
+const colors=['#ef4444','#f59e0b','#22c55e','#3b82f6','#a855f7'];
+best=parseInt(localStorage.getItem('brickBest'))||0;
+function init(){
+paddle.x=(W-paddle.w)/2;
+ball={x:W/2,y:H-60,r:7,vx:4,vy:-4};
+balls=[ball];bricks=[];score=0;lives=3;level=1;gameStarted=false;particles=[];
+document.getElementById('score').textContent=0;document.getElementById('lives').textContent=3;document.getElementById('level').textContent=1;
+generateBricks()
+}
+function generateBricks(){
+bricks=[];
+const rows=4+Math.min(level-1,4),cols=8,gap=4,bw=(W-gap*(cols+1))/cols,bh=22;
+for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+bricks.push({x:gap+c*(bw+gap),y:40+r*(bh+gap),w:bw,h:bh,color:colors[(r+c)%colors.length],hp:level>2?2:1})
+}
+}
+function spawnParticles(x,y,color){for(let i=0;i<6;i++)particles.push({x,y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:1,color})}
+function startGame(){init();document.getElementById('startOverlay').style.display='none';document.getElementById('overOverlay').style.display='none';clearInterval(loop);loop=setInterval(update,16)}
+function launchBall(){if(!gameStarted){gameStarted=true;const b=ball;b.vx=(Math.random()-0.5)*4||3;b.vy=-4-Math.min(level*0.5,3)}}
+function update(){
+document.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect();paddle.x=Math.max(0,Math.min(W-paddle.w,e.clientX-r.left-paddle.w/2))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')paddle.x=Math.max(0,paddle.x-8);if(e.key==='ArrowRight'||e.key==='d')paddle.x=Math.min(W-paddle.w,paddle.x+8);if(e.key===' '){launchBall();e.preventDefault()}});
+c.addEventListener('click',launchBall);
+if(!gameStarted){ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r;draw();return}
+balls.forEach(b=>{
+b.x+=b.vx;b.y+=b.vy;
+if(b.x-b.r<=0||b.x+b.r>=W)b.vx*=-1;
+if(b.y-b.r<=0)b.vy*=-1;
+if(b.y+b.r>=H){balls=balls.filter(bb=>bb!==b);if(balls.length===0){lives--;document.getElementById('lives').textContent=lives;if(lives<=0){gameOver('Game Over!');return}
+gameStarted=false;ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r;ball.vx=0;ball.vy=0;balls=[ball]}}
+if(b.y+b.r>=paddle.y&&b.y-b.r<=paddle.y+paddle.h&&b.x>=paddle.x&&b.x<=paddle.x+paddle.w){
+const hitPos=(b.x-paddle.x)/paddle.w;b.vy=-Math.abs(b.vy);b.vx=(hitPos-0.5)*8;b.y=paddle.y-b.r}
+bricks.forEach((br,i)=>{
+if(b.x+b.r>br.x&&b.x-b.r<br.x+br.w&&b.y+b.r>br.y&&b.y-b.r<br.y+br.h){
+br.hp--;b.vy*=-1;spawnParticles(br.x+br.w/2,br.y+br.h/2,br.color);
+if(br.hp<=0){bricks.splice(i,1);score+=10;document.getElementById('score').textContent=score}
+}
+})
+});
+particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life-=0.03;return p.life>0});
+if(bricks.length===0){
+if(score>best){best=score;localStorage.setItem('brickBest',best)}
+level++;document.getElementById('level').textContent=level;gameStarted=false;
+ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r;ball.vx=0;ball.vy=0;balls=[ball];generateBricks()
+}
+draw()
+}
+function draw(){
+ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+bricks.forEach(b=>{ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=4;ctx.beginPath();ctx.roundRect(b.x,b.y,b.w,b.h,3);ctx.fill();ctx.shadowBlur=0});
+ctx.fillStyle='#6366f1';ctx.shadowColor='#6366f1';ctx.shadowBlur=8;ctx.beginPath();ctx.roundRect(paddle.x,paddle.y,paddle.w,paddle.h,7);ctx.fill();ctx.shadowBlur=0;
+balls.forEach(b=>{ctx.fillStyle='#fff';ctx.shadowColor='#fff';ctx.shadowBlur=10;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0});
+particles.forEach(p=>{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(p.x-2,p.y-2,4,4)});ctx.globalAlpha=1
+}
+function gameOver(title){clearInterval(loop);if(score>best){best=score;localStorage.setItem('brickBest',best)}
+document.getElementById('overTitle').textContent=title||'Game Over!';document.getElementById('finalScore').textContent=score;document.getElementById('overOverlay').style.display='flex'}
+init();draw();
+</script>
+</body>
+</html>

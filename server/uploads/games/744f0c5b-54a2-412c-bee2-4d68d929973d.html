@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Match Pairs Memory</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+        .game-container {
+            background: #16213e;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            width: 95vmin;
+            max-width: 600px;
+            position: relative;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1/1;
+            border-radius: 16px;
+            background: #0f3460;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 24px;
+        }
+        .ui-overlay > * { pointer-events: auto; }
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(6px);
+            border-radius: 24px;
+            padding: 30px 40px;
+            color: white;
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+        .screen.active { display: flex; }
+        .screen h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #f7971e, #ffd200);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+        }
+        .screen p {
+            font-size: 1.1em;
+            margin: 8px 0;
+            opacity: 0.9;
+        }
+        .btn {
+            background: linear-gradient(135deg, #f7971e, #ffd200);
+            border: none;
+            color: #1a1a2e;
+            font-size: 1.3em;
+            font-weight: bold;
+            padding: 12px 40px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 4px 15px rgba(247, 151, 30, 0.4);
+            pointer-events: auto;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 25px rgba(247, 151, 30, 0.6);
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 10px 5px 5px 5px;
+            color: #ddd;
+            font-size: 1.1em;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        .stats span {
+            background: rgba(255,255,255,0.08);
+            padding: 6px 16px;
+            border-radius: 30px;
+            backdrop-filter: blur(2px);
+        }
+        .stats .moves { color: #ffd200; }
+        .stats .timer { color: #7ec8e3; }
+        .victory-stats {
+            font-size: 1.2em;
+            margin: 10px 0;
+            background: rgba(255,255,255,0.1);
+            padding: 12px 20px;
+            border-radius: 16px;
+            width: 100%;
+        }
+        .victory-stats div {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+        .victory-stats .label { opacity: 0.7; }
+        .victory-stats .value { font-weight: bold; color: #ffd200; }
+        .restart-btn {
+            background: #e94560;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+            font-size: 1em;
+            padding: 8px 20px;
+            margin-top: 5px;
+            margin-left: 10px;
+            pointer-events: auto;
+        }
+        .restart-btn:hover {
+            box-shadow: 0 6px 25px rgba(233, 69, 96, 0.6);
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .top-bar .title {
+            color: white;
+            font-size: 1.2em;
+            font-weight: 600;
+            opacity: 0.9;
+            letter-spacing: 1px;
+        }
+        @media (max-width: 500px) {
+            .game-container { padding: 12px; border-radius: 16px; }
+            .screen { padding: 20px; }
+            .screen h1 { font-size: 1.8em; }
+            .btn { font-size: 1.1em; padding: 10px 30px; }
+            .stats { font-size: 0.95em; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div class="top-bar">
+        <div class="title">🧠 Match Pairs</div>
+        <button class="btn restart-btn" id="restartTopBtn" style="display:none;">↺ Restart</button>
+    </div>
+    <div style="position:relative;">
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div class="ui-overlay">
+            <!-- Start Screen -->
+            <div class="screen active" id="startScreen">
+                <h1>🎴 Match Pairs</h1>
+                <p>Flip cards and find all matching pairs!</p>
+                <p style="font-size:0.9em; opacity:0.7;">Click or tap a card to flip it.</p>
+                <button class="btn" id="startBtn">▶ Play</button>
+            </div>
+            <!-- Victory Screen -->
+            <div class="screen" id="victoryScreen">
+                <h1>🎉 You Win!</h1>
+                <p style="font-size:1.2em; margin-bottom:5px;">All pairs matched!</p>
+                <div class="victory-stats" id="victoryStats">
+                    <div><span class="label">Moves</span><span class="value" id="finalMoves">0</span></div>
+                    <div><span class="label">Time</span><span class="value" id="finalTime">0:00</span></div>
+                </div>
+                <button class="btn" id="playAgainBtn">🔄 Play Again</button>
+            </div>
+        </div>
+    </div>
+    <div class="stats">
+        <span class="moves">🎯 Moves: <span id="movesDisplay">0</span></span>
+        <span class="timer">⏱️ <span id="timerDisplay">0:00</span></span>
+    </div>
+</div>
+
+<script>
+(function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI elements
+    const movesDisplay = document.getElementById('movesDisplay');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const startScreen = document.getElementById('startScreen');
+    const victoryScreen = document.getElementById('victoryScreen');
+    const startBtn = document.getElementById('startBtn');
+    const playAgainBtn = document.getElementById('playAgainBtn');
+    const restartTopBtn = document.getElementById('restartTopBtn');
+    const finalMoves = document.getElementById('finalMoves');
+    const finalTime = document.getElementById('finalTime');
+
+    // Game state
+    const GRID_SIZE = 4;
+    const TOTAL_CARDS = GRID_SIZE * GRID_SIZE;
+    const PAIRS = TOTAL_CARDS / 2;
+
+    // Icons: simple shapes with colors
+    const ICONS = [
+        { shape: 'star', color: '#FFD700' },
+        { shape: 'heart', color: '#FF6B6B' },
+        { shape: 'circle', color: '#4ECDC4' },
+        { shape: 'diamond', color: '#A29BFE' },
+        { shape: 'triangle', color: '#FDCB6E' },
+        { shape: 'square', color: '#74B9FF' },
+        { shape: 'hexagon', color: '#FD79A8' },
+        { shape: 'moon', color: '#DFE6E9' }
+    ];
+
+    let cards = [];
+    let flippedIndices = []; // indices of currently flipped cards (max 2)
+    let matchedPairs = 0;
+    let moves = 0;
+    let gameActive = false;
+    let gameStarted = false;
+    let canFlip = true;
+    let flipBackTimer = null;
+    let matchAnimTimer = null;
+    let matchAnimIndices = [];
+    let matchAnimProgress = 0;
+
+    // Timer
+    let startTime = 0;
+    let elapsedTime = 0;
+    let timerInterval = null;
+
+    // Card dimensions
+    let cardWidth, cardHeight, padding;
+
+    // Responsive sizing
+    function calculateCardSize() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const totalPadding = (GRID_SIZE + 1) * 8;
+        cardWidth = (w - totalPadding) / GRID_SIZE;
+        cardHeight = (h - totalPadding) / GRID_SIZE;
+        padding = 8;
+    }
+
+    // Shuffle array
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    // Initialize cards
+    function initCards() {
+        let pairs = [];
+        for (let i = 0; i < PAIRS; i++) {
+            pairs.push(i, i);
+        }
+        shuffleArray(pairs);
+
+        cards = [];
+        for (let i = 0; i < TOTAL_CARDS; i++) {
+            const iconIndex = pairs[i];
+            cards.push({
+                id: i,
+                pairId: iconIndex,
+                icon: ICONS[iconIndex],
+                flipped: false,
+                matched: false,
+                flipProgress: 0, // 0 = face down, 1 = face up
+                flipping: false,
+                scale: 1,
+                glow: 0
+            });
+        }
+        flippedIndices = [];
+        matchedPairs = 0;
+        moves = 0;
+        canFlip = true;
+        matchAnimIndices = [];
+        matchAnimProgress = 0;
+        if (flipBackTimer) {
+            clearTimeout(flipBackTimer);
+            flipBackTimer = null;
+        }
+        if (matchAnimTimer) {
+            clearTimeout(matchAnimTimer);
+            matchAnimTimer = null;
+        }
+        updateMovesDisplay();
+    }
+
+    // Start game
+    function startGame() {
+        initCards();
+        elapsedTime = 0;
+        startTime = performance.now();
+        gameActive = true;
+        gameStarted = true;
+        startScreen.classList.remove('active');
+        victoryScreen.classList.remove('active');
+        restartTopBtn.style.display = 'inline-block';
+        updateTimerDisplay(0);
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (gameActive) {
+                const now = performance.now();
+                elapsedTime = now - startTime;
+                updateTimerDisplay(elapsedTime);
+            }
+        }, 100);
+        canFlip = true;
+        draw();
+    }
+
+    // End game (victory)
+    function endGame() {
+        gameActive = false;
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        finalMoves.textContent = moves;
+        const totalSec = Math.floor(elapsedTime / 1000);
+        const min = Math.floor(totalSec / 60);
+        const sec = totalSec % 60;
+        finalTime.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+        victoryScreen.classList.add('active');
+        restartTopBtn.style.display = 'inline-block';
+        draw();
+    }
+
+    // Flip card logic
+    function flipCard(index) {
+        if (!gameActive || !canFlip || cards[index].matched || cards[index].flipped) return;
+        if (flippedIndices.length >= 2) return;
+
+        // Start flip animation
+        cards[index].flipping = true;
+        cards[index].flipProgress = 0;
+        flippedIndices.push(index);
+        moves++;
+        updateMovesDisplay();
+
+        // Animate flip
+        animateFlip(index);
+
+        if (flippedIndices.length === 2) {
+            canFlip = false;
+            const idx1 = flippedIndices[0];
+            const idx2 = flippedIndices[1];
+            // Check match
+            if (cards[idx1].pairId === cards[idx2].pairId) {
+                // Match! 
+                setTimeout(() => {
+                    matchAnimIndices = [idx1, idx2];
+                    matchAnimProgress = 0;
+                    animateMatch();
+                }, 400);
+            } else {
+                // No match - flip back after delay
+                flipBackTimer = setTimeout(() => {
+                    flipBackCards();
+                }, 900);
+            }
+        }
+    }
+
+    function animateFlip(index) {
+        const card = cards[index];
+        if (!card.flipping) return;
+        card.flipProgress += 0.12;
+        if (card.flipProgress >= 1) {
+            card.flipProgress = 1;
+            card.flipping = false;
+            card.flipped = true;
+            draw();
+            return;
+        }
+        draw();
+        requestAnimationFrame(() => animateFlip(index));
+    }
+
+    function flipBackCards() {
+        if (flippedIndices.length === 2) {
+            const idx1 = flippedIndices[0];
+            const idx2 = flippedIndices[1];
+            // Animate flip back
+            cards[idx1].flipping = true;
+            cards[idx1].flipProgress = 1;
+            cards[idx2].flipping = true;
+            cards[idx2].flipProgress = 1;
+            animateFlipBack(idx1, idx2);
+        }
+        flippedIndices = [];
+        canFlip = true;
+    }
+
+    function animateFlipBack(idx1, idx2) {
+        const c1 = cards[idx1];
+        const c2 = cards[idx2];
+        if (!c1.flipping && !c2.flipping) return;
+        if (c1.flipping) {
+            c1.flipProgress -= 0.1;
+            if (c1.flipProgress <= 0) {
+                c1.flipProgress = 0;
+                c1.flipping = false;
+                c1.flipped = false;
+            }
+        }
+        if (c2.flipping) {
+            c2.flipProgress -= 0.1;
+            if (c2.flipProgress <= 0) {
+                c2.flipProgress = 0;
+                c2.flipping = false;
+                c2.flipped = false;
+            }
+        }
+        draw();
+        if (c1.flipping || c2.flipping) {
+            requestAnimationFrame(() => animateFlipBack(idx1, idx2));
+        } else {
+            canFlip = true;
+        }
+    }
+
+    function animateMatch() {
+        if (matchAnimIndices.length === 0) return;
+        matchAnimProgress += 0.08;
+        if (matchAnimProgress >= 1) {
+            matchAnimProgress = 1;
+            // Mark as matched
+            for (let idx of matchAnimIndices) {
+                cards[idx].matched = true;
+                cards[idx].flipped = true;
+                cards[idx].flipProgress = 1;
+                cards[idx].scale = 1;
+                cards[idx].glow = 0;
+            }
+            matchedPairs++;
+            matchAnimIndices = [];
+            flippedIndices = [];
+            canFlip = true;
+            draw();
+            // Check win
+            if (matchedPairs === PAIRS) {
+                setTimeout(() => endGame(), 400);
+            }
+            return;
+        }
+        // Update glow and scale
+        for (let idx of matchAnimIndices) {
+            cards[idx].glow = Math.sin(matchAnimProgress * Math.PI) * 0.8;
+            cards[idx].scale = 1 + Math.sin(matchAnimProgress * Math.PI) * 0.15;
+        }
+        draw();
+        requestAnimationFrame(animateMatch);
+    }
+
+    // Drawing
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        calculateCardSize();
+
+        // Draw grid background
+        ctx.fillStyle = '#0f3460';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < TOTAL_CARDS; i++) {
+            const card = cards[i];
+            const row = Math.floor(i / GRID_SIZE);
+            const col = i % GRID_SIZE;
+            const x = padding + col * (cardWidth + padding);
+            const y = padding + row * (cardHeight + padding);
+
+            ctx.save();
+            ctx.translate(x + cardWidth/2, y + cardHeight/2);
+
+            // Apply scale for match animation
+            const scale = card.scale || 1;
+            ctx.scale(scale, scale);
+
+            // Card dimensions for drawing
+            const w = cardWidth;
+            const h = cardHeight;
+
+            // Draw card shadow
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 4;
+
+            // Determine if card is face up or face down based on flip progress
+            const flip = card.flipProgress;
+            const isFlipped = card.flipped || card.matched;
+
+            // Flip effect: scale X based on progress
+            const scaleX = card.flipping ? Math.abs(Math.cos(flip * Math.PI / 2)) : (isFlipped ? 1 : 0);
+            // Actually use cosine for smooth flip: 0->1 as progress goes 0->1
+            let displayFlip = isFlipped ? 1 : 0;
+            if (card.flipping) {
+                displayFlip = flip;
+            }
+            const flipScaleX = Math.cos((1 - displayFlip) * Math.PI / 2);
+            ctx.scale(flipScaleX, 1);
+
+            // Draw card background
+            const radius = 12;
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 2;
+
+            if (displayFlip < 0.5) {
+                // Face down
+                const grad = ctx.createLinearGradient(-w/2, -h/2, w/2, h/2);
+                grad.addColorStop(0, '#2d3436');
+                grad.addColorStop(0.5, '#636e72');
+                grad.addColorStop(1, '#2d3436');
+                ctx.fillStyle = grad;
+                roundRect(ctx, -w/2, -h/2, w, h, radius);
+                ctx.fill();
+                // Pattern
+                ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                for (let p = 0; p < 6; p++) {
+                    const px = -w/2 + 10 + p * 18;
+                    const py = -h/2 + 10 + (p%3)*18;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                // Question mark
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.font = 'bold ' + (w*0.35) + 'px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('?', 0, 0);
+            } else {
+                // Face up - white background
+                ctx.shadowColor = 'rgba(0,0,0,0.2)';
+                ctx.fillStyle = '#ffffff';
+                roundRect(ctx, -w/2, -h/2, w, h, radius);
+                ctx.fill();
+
+                // Glow effect for match animation
+                if (card.glow > 0.01) {
+                    ctx.shadowColor = card.icon.color;
+                    ctx.shadowBlur = 25 * card.glow;
+                    ctx.strokeStyle = card.icon.color;
+                    ctx.lineWidth = 3 * card.glow;
+                    roundRect(ctx, -w/2, -h/2, w, h, radius);
+                    ctx.stroke();
+                }
+
+                // Draw icon
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = card.icon.color;
+                const iconSize = w * 0.35;
+                drawIcon(ctx, card.icon.shape, 0, 0, iconSize);
+            }
+
+            ctx.restore();
+        }
+
+        // Draw matched pairs overlay (subtle)
+        if (matchAnimIndices.length > 0) {
+            // already handled per card
+        }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+    }
+
+    function drawIcon(ctx, shape, x, y, size) {
+        ctx.save();
+        ctx.translate(x, y);
+        const s = size;
+        ctx.lineWidth = s * 0.12;
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+        ctx.fillStyle = ctx.fillStyle || '#FFD700';
+
+        switch(shape) {
+            case 'star':
+                drawStar(ctx, 0, 0, s*0.45, s*0.22, 5);
+                break;
+            case 'heart':
+                ctx.beginPath();
+                ctx.moveTo(0, s*0.3);
+                ctx.bezierCurveTo(-s*0.5, -s*0.2, -s*0.3, -s*0.6, 0, -s*0.3);
+                ctx.bezierCurveTo(s*0.3, -s*0.6, s*0.5, -s*0.2, 0, s*0.3);
+                ctx.fill();
+                break;
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc(0, 0, s*0.4, 0, Math.PI*2);
+                ctx.fill();
+                break;
+            case 'diamond':
+                ctx.beginPath();
+                ctx.moveTo(0, -s*0.5);
+                ctx.lineTo(s*0.5, 0);
+                ctx.lineTo(0, s*0.5);
+                ctx.lineTo(-s*0.5, 0);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'triangle':
+                ctx.beginPath();
+                ctx.moveTo(0, -s*0.5);
+                ctx.lineTo(s*0.5, s*0.4);
+                ctx.lineTo(-s*0.5, s*0.4);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'square':
+                ctx.fillRect(-s*0.4, -s*0.4, s*0.8, s*0.8);
+                break;
+            case 'hexagon':
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = Math.PI/3 * i - Math.PI/6;
+                    const px = Math.cos(angle) * s*0.45;
+                    const py = Math.sin(angle) * s*0.45;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'moon':
+                ctx.beginPath();
+                ctx.arc(0, 0, s*0.4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(s*0.15, -s*0.1, s*0.3, 0, Math.PI*2);
+                ctx.fill();
+                break;
+            default:
+                ctx.fillRect(-s*0.3, -s*0.3, s*0.6, s*0.6);
+        }
+        ctx.restore();
+    }
+
+    function drawStar(ctx, cx, cy, outerR, innerR, points) {
+        ctx.beginPath();
+        for (let i = 0; i < points * 2; i++) {
+            const r = i % 2 === 0 ? outerR : innerR;
+            const angle = (Math.PI / points) * i - Math.PI/2;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Input handling
+    function getCardIndexFromPos(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+
+        if (x < 0 || y < 0 || x > canvas.width || y > canvas.height) return -1;
+
+        calculateCardSize();
+        const col = Math.floor(x / (cardWidth + padding));
+        const row = Math.floor(y / (cardHeight + padding));
+        if (col >= GRID_SIZE || row >= GRID_SIZE) return -1;
+        // Check if within actual card area
+        const cardX = padding + col * (cardWidth + padding);
+        const cardY = padding + row * (cardHeight + padding);
+        if (x < cardX || x > cardX + cardWidth || y < cardY || y > cardY + cardHeight) return -1;
+
+        return row * GRID_SIZE + col;
+    }
+
+    function handleInput(clientX, clientY) {
+        if (!gameStarted) {
+            startGame();
+            return;
+        }
+        if (!gameActive) return;
+        const idx = getCardIndexFromPos(clientX, clientY);
+        if (idx >= 0) {
+            flipCard(idx);
+        }
+    }
+
+    canvas.addEventListener('click', (e) => {
+        handleInput(e.clientX, e.clientY);
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handleInput(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    // UI updates
+    function updateMovesDisplay() {
+        movesDisplay.textContent = moves;
+    }
+
+    function updateTimerDisplay(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const min = Math.floor(totalSec / 60);
+        const sec = totalSec % 60;
+        timerDisplay.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    // Buttons
+    startBtn.addEventListener('click', startGame);
+    playAgainBtn.addEventListener('click', startGame);
+    restartTopBtn.addEventListener('click', startGame);
+
+    // Initial draw
+    calculateCardSize();
+    initCards();
+    gameActive = false;
+    gameStarted = false;
+    draw();
+
+    // Responsive resize
+    function resizeCanvas() {
+        const container = canvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        // Canvas size is handled by CSS aspect-ratio, just need to redraw
+        draw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+})();
+</script>
+</body>
+</html>

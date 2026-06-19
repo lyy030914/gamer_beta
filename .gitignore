@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-shm
+*.db-wal
+uploads/games/*
+uploads/covers/*
+!uploads/games/.gitkeep
+!uploads/covers/.gitkeep
+.DS_Store
