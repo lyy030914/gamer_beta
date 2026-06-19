@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Aim Rush</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background: #0a0a12;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: crosshair;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            max-width: 95vw;
+            aspect-ratio: 4/3;
+            border: 2px solid #2a2a3a;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(0, 200, 255, 0.15);
+            background: #12121e;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #c8d0e0;
+            text-shadow: 0 0 12px rgba(0,200,255,0.3);
+            pointer-events: none;
+        }
+        #hud span {
+            background: rgba(10,10,20,0.7);
+            padding: 4px 14px;
+            border-radius: 30px;
+            backdrop-filter: blur(2px);
+            border: 1px solid #2a3a4a;
+        }
+        #scoreLabel { color: #7ec8ff; }
+        #timerLabel { color: #ffb07c; }
+        #highScoreLabel { color: #ffd966; font-size: 1rem; }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(8,8,16,0.75);
+            backdrop-filter: blur(4px);
+            pointer-events: auto;
+            transition: opacity 0.3s;
+            border-radius: 10px;
+        }
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay h1 {
+            font-size: 4rem;
+            color: #7ec8ff;
+            text-shadow: 0 0 30px rgba(0,180,255,0.5);
+            margin-bottom: 0.2em;
+            letter-spacing: 4px;
+        }
+        #overlay h2 {
+            font-size: 2.2rem;
+            color: #ffb07c;
+            margin-bottom: 0.5em;
+        }
+        #overlay p {
+            font-size: 1.3rem;
+            color: #aab;
+            margin: 0.3em 0;
+            max-width: 70%;
+            text-align: center;
+            line-height: 1.4;
+        }
+        #overlay .score-final {
+            font-size: 3rem;
+            color: #ffd966;
+            margin: 0.2em 0;
+        }
+        #overlay .highscore-final {
+            font-size: 1.4rem;
+            color: #b0c4de;
+            margin-bottom: 0.8em;
+        }
+        #startBtn, #restartBtn {
+            pointer-events: auto;
+            font-size: 1.8rem;
+            font-weight: 700;
+            padding: 14px 48px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 60px;
+            background: linear-gradient(135deg, #2a8aff, #1a5fbf);
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(42,138,255,0.4);
+            transition: transform 0.15s, box-shadow 0.2s;
+            letter-spacing: 2px;
+        }
+        #startBtn:hover, #restartBtn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 50px rgba(42,138,255,0.7);
+        }
+        #instructions {
+            margin-top: 12px;
+            font-size: 1rem;
+            color: #8899aa;
+            background: rgba(20,20,40,0.5);
+            padding: 8px 20px;
+            border-radius: 30px;
+            border: 1px solid #2a3a4a;
+        }
+        @media (max-width: 600px) {
+            #overlay h1 { font-size: 2.8rem; }
+            #overlay h2 { font-size: 1.6rem; }
+            #overlay p { font-size: 1rem; max-width: 90%; }
+            #overlay .score-final { font-size: 2.2rem; }
+            #startBtn, #restartBtn { font-size: 1.4rem; padding: 12px 32px; }
+            #hud { font-size: 1.1rem; padding: 8px 12px; }
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div id="hud">
+            <span id="scoreLabel">🎯 0</span>
+            <span id="timerLabel">⏱ 30.0</span>
+            <span id="highScoreLabel">🏆 0</span>
+        </div>
+        <div id="overlay">
+            <h1>AIM RUSH</h1>
+            <p>Click the neon targets before they vanish!<br>Misses cost time — stay sharp.</p>
+            <div id="instructions">🎯 Click to shoot &nbsp;·&nbsp; ⏱ Survive the clock</div>
+            <button id="startBtn">▶ START</button>
+        </div>
+    </div>
+</div>
+<script>
+    (function(){
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+        const overlay = document.getElementById('overlay');
+        const scoreSpan = document.getElementById('scoreLabel');
+        const timerSpan = document.getElementById('timerLabel');
+        const highScoreSpan = document.getElementById('highScoreLabel');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.createElement('button');
+        restartBtn.id = 'restartBtn';
+        restartBtn.textContent = '↻ PLAY AGAIN';
+        restartBtn.style.display = 'none';
+        overlay.appendChild(restartBtn);
+
+        // ---- RESIZE ----
+        let W, H;
+        function resize() {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            W = canvas.width;
+            H = canvas.height;
+            ctx.scale(1,1);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ---- AUDIO (Web Audio) ----
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        function playTone(freq, duration, type='square', vol=0.12) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+        function sfxHit() { playTone(880, 0.09, 'sine', 0.15); setTimeout(()=>playTone(1200,0.06,'sine',0.08),50); }
+        function sfxMiss() { playTone(180, 0.18, 'sawtooth', 0.10); }
+        function sfxGameOver() { playTone(440,0.2); setTimeout(()=>playTone(330,0.25),200); setTimeout(()=>playTone(220,0.35),400); }
+
+        // ---- GAME STATE ----
+        let state = 'menu'; // menu | playing | gameover
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('aimrush_highscore')) || 0;
+        let timer = 30.0;
+        let maxTimer = 30.0;
+        let targets = [];
+        let particles = [];
+        let shakeAmount = 0;
+        let spawnTimer = 0;
+        let spawnInterval = 0.9; // seconds
+        let targetBaseLifetime = 2.2;
+        let targetBaseRadius = 38;
+        let difficultyLevel = 0;
+
+        // ---- TARGET CLASS ----
+        class Target {
+            constructor(x, y, radius, lifetime) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.maxRadius = radius;
+                this.lifetime = lifetime;
+                this.maxLifetime = lifetime;
+                this.alive = true;
+                this.danger = false;
+            }
+            update(dt) {
+                this.lifetime -= dt;
+                if (this.lifetime <= 0) {
+                    this.alive = false;
+                    return;
+                }
+                // shrink over time
+                const lifeRatio = this.lifetime / this.maxLifetime;
+                this.radius = this.maxRadius * (0.15 + 0.85 * lifeRatio);
+                // danger when low time
+                if (lifeRatio < 0.25) this.danger = true;
+                else this.danger = false;
+            }
+            draw(ctx) {
+                if (!this.alive) return;
+                const r = Math.max(this.radius, 2);
+                // glow
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r*2.5);
+                if (this.danger) {
+                    grad.addColorStop(0, 'rgba(255,60,60,0.9)');
+                    grad.addColorStop(0.4, 'rgba(200,30,30,0.5)');
+                    grad.addColorStop(1, 'rgba(180,0,0,0)');
+                } else {
+                    grad.addColorStop(0, 'rgba(0,220,160,0.9)');
+                    grad.addColorStop(0.4, 'rgba(0,180,120,0.5)');
+                    grad.addColorStop(1, 'rgba(0,100,60,0)');
+                }
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, r*2.5, 0, Math.PI*2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // core
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+                if (this.danger) {
+                    ctx.fillStyle = '#ff3a3a';
+                    ctx.strokeStyle = '#ff8888';
+                } else {
+                    ctx.fillStyle = '#00eeaa';
+                    ctx.strokeStyle = '#88ffdd';
+                }
+                ctx.lineWidth = 2;
+                ctx.fill();
+                ctx.stroke();
+
+                // inner highlight
+                ctx.beginPath();
+                ctx.arc(this.x- r*0.2, this.y - r*0.2, r*0.3, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fill();
+            }
+            contains(px, py) {
+                const dx = this.x - px;
+                const dy = this.y - py;
+                return (dx*dx + dy*dy) <= (this.radius * this.radius);
+            }
+        }
+
+        // ---- PARTICLE ----
+        class Particle {
+            constructor(x, y, color, speed, life, size) {
+                this.x = x;
+                this.y = y;
+                const angle = Math.random() * Math.PI * 2;
+                const spd = speed * (0.5 + Math.random());
+                this.vx = Math.cos(angle) * spd;
+                this.vy = Math.sin(angle) * spd;
+                this.life = life;
+                this.maxLife = life;
+                this.size = size || (3 + Math.random()*5);
+                this.color = color;
+                this.alive = true;
+            }
+            update(dt) {
+                this.x += this.vx * dt * 60;
+                this.y += this.vy * dt * 60;
+                this.vx *= 0.97;
+                this.vy *= 0.97;
+                this.life -= dt;
+                if (this.life <= 0) this.alive = false;
+            }
+            draw(ctx) {
+                const alpha = Math.max(0, this.life / this.maxLife);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * (0.3 + 0.7 * alpha), 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ---- SPAWN TARGET ----
+        function spawnTarget() {
+            const margin = 50;
+            const x = margin + Math.random() * (W - 2*margin);
+            const y = margin + Math.random() * (H - 2*margin);
+            // difficulty scaling
+            const d = difficultyLevel;
+            const radius = Math.max(10, targetBaseRadius - d * 2.2);
+            const lifetime = Math.max(0.6, targetBaseLifetime - d * 0.12);
+            targets.push(new Target(x, y, radius, lifetime));
+        }
+
+        // ---- SPAWN PARTICLES (explosion) ----
+        function spawnExplosion(x, y, color, count=20, speed=6, life=0.5) {
+            for (let i=0; i<count; i++) {
+                const c = color || (Math.random()>0.5 ? '#7ec8ff' : '#ffd966');
+                particles.push(new Particle(x, y, c, speed, life * (0.5+Math.random()*0.5), 2+Math.random()*5));
+            }
+        }
+
+        // ---- HIT / MISS ----
+        function handleHit(target) {
+            target.alive = false;
+            score += 1 + Math.floor(difficultyLevel * 0.3);
+            timer = Math.min(maxTimer, timer + 0.3);
+            sfxHit();
+            spawnExplosion(target.x, target.y, '#00eeaa', 25, 7, 0.45);
+            spawnExplosion(target.x, target.y, '#88ffdd', 10, 3, 0.3);
+        }
+
+        function handleMiss() {
+            timer = Math.max(0, timer - 0.8);
+            shakeAmount = 6;
+            sfxMiss();
+            // red flash particles
+            for (let i=0; i<12; i++) {
+                particles.push(new Particle(
+                    Math.random()*W, Math.random()*H,
+                    '#ff4444', 4, 0.3, 3+Math.random()*4
+                ));
+            }
+        }
+
+        // ---- SHOOT ----
+        function shoot(mx, my) {
+            if (state !== 'playing') return;
+            // check targets (back to front)
+            let hit = false;
+            for (let i=targets.length-1; i>=0; i--) {
+                const t = targets[i];
+                if (t.alive && t.contains(mx, my)) {
+                    handleHit(t);
+                    hit = true;
+                    break;
+                }
+            }
+            if (!hit) {
+                handleMiss();
+            }
+        }
+
+        // ---- GAME LOOP ----
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+            lastTime = timestamp;
+
+            // update
+            if (state === 'playing') {
+                // timer
+                timer -= dt;
+                if (timer <= 0) {
+                    timer = 0;
+                    state = 'gameover';
+                    sfxGameOver();
+                    // save high score
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('aimrush_highscore', highScore);
+                    }
+                    showGameOver();
+                }
+
+                // difficulty
+                difficultyLevel = Math.floor(score / 5);
+                const spawnRate = Math.max(0.25, spawnInterval - difficultyLevel * 0.06);
+                spawnTimer += dt;
+                if (spawnTimer >= spawnRate) {
+                    spawnTimer = 0;
+                    spawnTarget();
+                    // extra target at high difficulty
+                    if (difficultyLevel > 3 && Math.random() < 0.3) spawnTarget();
+                }
+
+                // update targets
+                for (let i=targets.length-1; i>=0; i--) {
+                    targets[i].update(dt);
+                    if (!targets[i].alive) targets.splice(i,1);
+                }
+
+                // update particles
+                for (let i=particles.length-1; i>=0; i--) {
+                    particles[i].update(dt);
+                    if (!particles[i].alive) particles.splice(i,1);
+                }
+
+                // shake decay
+                if (shakeAmount > 0) shakeAmount *= 0.92;
+                if (shakeAmount < 0.1) shakeAmount = 0;
+
+                // update HUD
+                scoreSpan.textContent = `🎯 ${score}`;
+                timerSpan.textContent = `⏱ ${timer.toFixed(1)}`;
+                highScoreSpan.textContent = `🏆 ${highScore}`;
+            } else if (state === 'gameover') {
+                // still update particles for visual
+                for (let i=particles.length-1; i>=0; i--) {
+                    particles[i].update(dt);
+                    if (!particles[i].alive) particles.splice(i,1);
+                }
+                if (shakeAmount > 0) shakeAmount *= 0.92;
+                if (shakeAmount < 0.1) shakeAmount = 0;
+            }
+
+            // ---- DRAW ----
+            ctx.save();
+            // shake
+            if (shakeAmount > 0.5) {
+                const sx = (Math.random()-0.5)*shakeAmount*2;
+                const sy = (Math.random()-0.5)*shakeAmount*2;
+                ctx.translate(sx, sy);
+            }
+
+            // background
+            ctx.fillStyle = '#12121e';
+            ctx.fillRect(0, 0, W, H);
+
+            // grid (subtle)
+            ctx.strokeStyle = 'rgba(40,60,80,0.08)';
+            ctx.lineWidth = 1;
+            for (let x=0; x<W; x+=40) {
+                ctx.beginPath();
+                ctx.moveTo(x,0);
+                ctx.lineTo(x,H);
+                ctx.stroke();
+            }
+            for (let y=0; y<H; y+=40) {
+                ctx.beginPath();
+                ctx.moveTo(0,y);
+                ctx.lineTo(W,y);
+                ctx.stroke();
+            }
+
+            // draw targets
+            for (const t of targets) t.draw(ctx);
+
+            // draw particles
+            for (const p of particles) p.draw(ctx);
+
+            // crosshair (custom)
+            const cx = W/2, cy = H/2;
+            ctx.strokeStyle = 'rgba(200,220,255,0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 20, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cx-12, cy);
+            ctx.lineTo(cx+12, cy);
+            ctx.moveTo(cx, cy-12);
+            ctx.lineTo(cx, cy+12);
+            ctx.stroke();
+
+            ctx.restore();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ---- UI ----
+        function showGameOver() {
+            overlay.classList.remove('hidden');
+            overlay.innerHTML = `
+                <h2>⏱ TIME'S UP</h2>
+                <div class="score-final">${score}</div>
+                <div class="highscore-final">🏆 Best: ${highScore}</div>
+                <p>${score >= highScore && score>0 ? '✦ NEW HIGH SCORE! ✦' : 'Keep practicing!'}</p>
+                <button id="restartBtn">↻ PLAY AGAIN</button>
+            `;
+            document.getElementById('restartBtn').addEventListener('click', startGame);
+            restartBtn.style.display = 'none';
+        }
+
+        function showMenu() {
+            overlay.classList.remove('hidden');
+            overlay.innerHTML = `
+                <h1>AIM RUSH</h1>
+                <p>Click the neon targets before they vanish!<br>Misses cost time — stay sharp.</p>
+                <div id="instructions">🎯 Click to shoot &nbsp;·&nbsp; ⏱ Survive the clock</div>
+                <button id="startBtn">▶ START</button>
+            `;
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            highScoreSpan.textContent = `🏆 ${highScore}`;
+        }
+
+        function startGame() {
+            initAudio();
+            overlay.classList.add('hidden');
+            // reset
+            score = 0;
+            timer = 30.0;
+            maxTimer = 30.0;
+            targets = [];
+            particles = [];
+            shakeAmount = 0;
+            spawnTimer = 0;
+            difficultyLevel = 0;
+            state = 'playing';
+            scoreSpan.textContent = `🎯 0`;
+            timerSpan.textContent = `⏱ 30.0`;
+            highScoreSpan.textContent = `🏆 ${highScore}`;
+            // spawn initial targets
+            for (let i=0; i<3; i++) spawnTarget();
+            spawnTimer = 0.4;
+            // remove extra buttons
+            const oldRestart = document.getElementById('restartBtn');
+            if (oldRestart) oldRestart.remove();
+        }
+
+        // ---- INPUT ----
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+                e.preventDefault();
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function onShoot(e) {
+            const {x, y} = getCanvasCoords(e);
+            shoot(x, y);
+        }
+
+        canvas.addEventListener('mousedown', onShoot);
+        canvas.addEventListener('touchstart', onShoot, {passive: false});
+
+        // Prevent context menu
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // ---- INIT ----
+        showMenu();
+        requestAnimationFrame(gameLoop);
+
+        // Resize handler for canvas scale
+        function handleResize() {
+            resize();
+            // redraw will happen on next frame
+        }
+        window.addEventListener('resize', handleResize);
+
+        // Also handle orientation change
+        window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
+
+        console.log('Aim Rush loaded!');
+    })();
+</script>
+</body>
+</html>

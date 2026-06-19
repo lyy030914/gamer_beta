@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Precision Aim Trainer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      cursor: none;
+      overflow: hidden;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vmin;
+      max-width: 800px;
+      aspect-ratio: 4/3;
+      background: #111;
+      border: 2px solid #2a2a2a;
+      border-radius: 12px;
+      box-shadow: 0 0 40px rgba(0, 255, 100, 0.1);
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: none;
+    }
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      color: white;
+    }
+    #hud {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      font-size: clamp(14px, 3.5vw, 24px);
+      font-weight: 600;
+      text-shadow: 0 0 10px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+    #hud-left, #hud-right {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+    .hud-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hud-label {
+      font-size: 0.7em;
+      opacity: 0.6;
+      font-weight: 400;
+    }
+    #combo-display {
+      color: #ffd700;
+      font-size: 1.1em;
+      text-shadow: 0 0 15px #ffd70088;
+    }
+    #score-val { color: #7aff7a; }
+    #timer-val { color: #ffaa66; }
+    #highscore-val { color: #66bbff; }
+    #message-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      pointer-events: auto;
+      transition: opacity 0.3s;
+    }
+    #message-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #message-overlay h1 {
+      font-size: clamp(32px, 8vw, 64px);
+      font-weight: 800;
+      margin-bottom: 8px;
+      text-shadow: 0 0 30px currentColor;
+    }
+    #message-overlay p {
+      font-size: clamp(16px, 3vw, 28px);
+      opacity: 0.9;
+      margin: 8px 0;
+    }
+    #message-overlay .btn {
+      margin-top: 20px;
+      padding: 14px 48px;
+      font-size: clamp(18px, 3vw, 28px);
+      font-weight: 700;
+      border: none;
+      border-radius: 60px;
+      background: linear-gradient(135deg, #2ecc71, #27ae60);
+      color: white;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 8px 20px rgba(46, 204, 113, 0.4);
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    #message-overlay .btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 12px 30px rgba(46, 204, 113, 0.6);
+    }
+    #message-overlay .btn:active {
+      transform: scale(0.95);
+    }
+    .subtitle {
+      font-size: 0.8em;
+      opacity: 0.6;
+      margin-top: 4px;
+    }
+    .red-text { color: #ff4466; }
+    .gold-text { color: #ffd700; }
+    .green-text { color: #7aff7a; }
+    #crosshair {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%);
+      opacity: 0.85;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: #ffffffcc;
+    }
+    #crosshair::before {
+      width: 2px;
+      height: 100%;
+      left: calc(50% - 1px);
+      top: 0;
+    }
+    #crosshair::after {
+      width: 100%;
+      height: 2px;
+      top: calc(50% - 1px);
+      left: 0;
+    }
+    .crosshair-dot {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: #ff4466cc;
+      border-radius: 50%;
+      top: calc(50% - 3px);
+      left: calc(50% - 3px);
+      box-shadow: 0 0 8px #ff446688;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-overlay">
+      <div id="hud">
+        <div id="hud-left">
+          <div class="hud-item"><span class="hud-label">SCORE</span> <span id="score-val">0</span></div>
+          <div class="hud-item" id="combo-display" style="display:none;"><span class="hud-label">COMBO</span> <span id="combo-val">x1</span></div>
+        </div>
+        <div id="hud-right">
+          <div class="hud-item"><span class="hud-label">TIME</span> <span id="timer-val">60</span></div>
+          <div class="hud-item"><span class="hud-label">BEST</span> <span id="highscore-val">0</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="message-overlay">
+      <h1 class="green-text">Precision Aim</h1>
+      <p>Hit green targets · Avoid red ones</p>
+      <p class="subtitle">Combo multiplier after 10 consecutive hits</p>
+      <button class="btn" id="startBtn">START GAME</button>
+      <p id="final-score" style="display:none; margin-top: 16px;"></p>
+    </div>
+  </div>
+  <div id="crosshair"><div class="crosshair-dot"></div></div>
+
+  <script>
+    (function() {
+      // --- Canvas Setup ---
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const container = document.getElementById('gameContainer');
+      let W, H;
+
+      function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        W = canvas.width;
+        H = canvas.height;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      // --- Audio Context (simple tones) ---
+      let audioCtx = null;
+      function initAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+
+      function playTone(freq, duration, type = 'sine', volume = 0.15) {
+        try {
+          initAudio();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + duration);
+        } catch(e) { /* silent fail */ }
+      }
+
+      function playHitSound() { playTone(880, 0.12, 'sine', 0.12); }
+      function playMissSound() { playTone(220, 0.3, 'sawtooth', 0.15); }
+      function playGameOverSound() { playTone(150, 0.5, 'square', 0.1); }
+      function playComboSound() { playTone(1200, 0.08, 'sine', 0.08); }
+
+      // --- Game State ---
+      const STATE = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+      let gameState = STATE.MENU;
+      let score = 0;
+      let timeLeft = 60;
+      let combo = 0;
+      let maxCombo = 0;
+      let highScore = parseInt(localStorage.getItem('precisionAimHighScore')) || 0;
+      let targets = [];
+      let particles = [];
+      let gameTimer = null;
+      let spawnInterval = null;
+      let lastTime = 0;
+      let gameRunning = false;
+      let mouseX = 0, mouseY = 0;
+      let canvasRect = null;
+
+      // DOM refs
+      const scoreEl = document.getElementById('score-val');
+      const timerEl = document.getElementById('timer-val');
+      const comboDisplay = document.getElementById('combo-display');
+      const comboVal = document.getElementById('combo-val');
+      const highScoreEl = document.getElementById('highscore-val');
+      const overlay = document.getElementById('message-overlay');
+      const startBtn = document.getElementById('startBtn');
+      const finalScoreEl = document.getElementById('final-score');
+      const crosshair = document.getElementById('crosshair');
+      const overlayTitle = overlay.querySelector('h1');
+      const overlaySub = overlay.querySelectorAll('p');
+
+      highScoreEl.textContent = highScore;
+
+      // --- Target Class ---
+      class Target {
+        constructor(x, y, radius, isBad = false) {
+          this.x = x;
+          this.y = y;
+          this.radius = radius;
+          this.baseRadius = radius;
+          this.isBad = isBad;
+          this.shrinkSpeed = (0.3 + Math.random() * 0.5) * (isBad ? 0.6 : 1);
+          this.life = 1.0;
+          this.alive = true;
+          this.glowPhase = Math.random() * Math.PI * 2;
+          this.spawnTime = performance.now();
+          // visual pulse
+        }
+
+        update(dt) {
+          if (!this.alive) return;
+          this.life -= this.shrinkSpeed * dt;
+          this.radius = this.baseRadius * Math.min(1, this.life * 1.2);
+          if (this.life <= 0 || this.radius < 2) {
+            this.alive = false;
+          }
+          this.glowPhase += dt * 3;
+        }
+
+        draw(ctx) {
+          if (!this.alive) return;
+          const r = Math.max(2, this.radius);
+          const glow = 0.3 + 0.3 * Math.sin(this.glowPhase);
+
+          if (this.isBad) {
+            // Red miss target with warning icon
+            ctx.save();
+            ctx.shadowColor = '#ff2244';
+            ctx.shadowBlur = 25 * glow;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+            ctx.fillStyle = '#cc1133';
+            ctx.fill();
+            ctx.strokeStyle = '#ff4466';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Warning triangle
+            const s = r * 0.5;
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffdd44';
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y - s);
+            ctx.lineTo(this.x - s*0.7, this.y + s*0.5);
+            ctx.lineTo(this.x + s*0.7, this.y + s*0.5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#cc1133';
+            ctx.font = `bold ${Math.floor(r*0.5)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('!', this.x, this.y + 1);
+            ctx.restore();
+          } else {
+            // Green target
+            ctx.save();
+            ctx.shadowColor = '#33ff77';
+            ctx.shadowBlur = 30 * glow;
+            const grad = ctx.createRadialGradient(this.x-2, this.y-2, 0, this.x, this.y, r);
+            grad.addColorStop(0, '#88ff88');
+            grad.addColorStop(0.6, '#33cc55');
+            grad.addColorStop(1, '#117722');
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = '#aaffaa';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // crosshair dot
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff44';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r*0.2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        contains(px, py) {
+          if (!this.alive) return false;
+          const dx = px - this.x;
+          const dy = py - this.y;
+          return (dx*dx + dy*dy) <= (this.radius * this.radius);
+        }
+      }
+
+      // --- Particle System ---
+      class Particle {
+        constructor(x, y, color, speed, size, life) {
+          this.x = x;
+          this.y = y;
+          const angle = Math.random() * Math.PI * 2;
+          const vel = speed * (0.5 + Math.random());
+          this.vx = Math.cos(angle) * vel;
+          this.vy = Math.sin(angle) * vel;
+          this.size = size * (0.5 + Math.random());
+          this.life = life * (0.5 + Math.random() * 0.5);
+          this.maxLife = this.life;
+          this.color = color;
+          this.alive = true;
+        }
+
+        update(dt) {
+          this.x += this.vx * dt * 60;
+          this.y += this.vy * dt * 60;
+          this.vy += 0.05 * dt * 60; // gravity
+          this.life -= dt;
+          if (this.life <= 0) this.alive = false;
+        }
+
+        draw(ctx) {
+          const alpha = Math.max(0, this.life / this.maxLife);
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = this.color;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI*2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      function spawnParticles(x, y, color, count = 15, speed = 4, size = 5, life = 0.6) {
+        for (let i = 0; i < count; i++) {
+          particles.push(new Particle(x, y, color, speed, size, life));
+        }
+      }
+
+      function spawnTargetExplosion(x, y, isBad) {
+        if (isBad) {
+          spawnParticles(x, y, '#ff4466', 25, 5, 6, 0.7);
+          spawnParticles(x, y, '#ffaa44', 15, 3, 3, 0.5);
+        } else {
+          spawnParticles(x, y, '#33ff77', 20, 4, 5, 0.6);
+          spawnParticles(x, y, '#aaffaa', 10, 2, 3, 0.4);
+        }
+      }
+
+      // --- Spawn Logic ---
+      function spawnTarget() {
+        if (gameState !== STATE.PLAYING) return;
+        const margin = 40 * (W/800);
+        const minR = 15 * (W/800);
+        const maxR = 45 * (W/800);
+        const radius = minR + Math.random() * (maxR - minR);
+        const x = margin + Math.random() * (W - 2*margin);
+        const y = margin + Math.random() * (H - 2*margin - 50); // avoid HUD area
+
+        // 15% chance of bad target
+        const isBad = Math.random() < 0.15;
+        targets.push(new Target(x, y, radius, isBad));
+      }
+
+      function startGame() {
+        initAudio();
+        score = 0;
+        timeLeft = 60;
+        combo = 0;
+        maxCombo = 0;
+        targets = [];
+        particles = [];
+        gameState = STATE.PLAYING;
+        overlay.classList.add('hidden');
+        finalScoreEl.style.display = 'none';
+        comboDisplay.style.display = 'none';
+        scoreEl.textContent = '0';
+        timerEl.textContent = '60';
+        highScoreEl.textContent = highScore;
+        gameRunning = true;
+
+        // Spawn initial targets
+        for (let i = 0; i < 4; i++) spawnTarget();
+
+        // Start timers
+        if (spawnInterval) clearInterval(spawnInterval);
+        spawnInterval = setInterval(() => {
+          if (gameState === STATE.PLAYING) spawnTarget();
+        }, 700);
+
+        if (gameTimer) clearInterval(gameTimer);
+        gameTimer = setInterval(() => {
+          if (gameState !== STATE.PLAYING) return;
+          timeLeft--;
+          timerEl.textContent = timeLeft;
+          if (timeLeft <= 0) {
+            endGame(false);
+          }
+        }, 1000);
+
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+      }
+
+      function endGame(hitBad = false) {
+        if (gameState !== STATE.PLAYING) return;
+        gameState = STATE.GAMEOVER;
+        gameRunning = false;
+        if (spawnInterval) clearInterval(spawnInterval);
+        if (gameTimer) clearInterval(gameTimer);
+
+        if (hitBad) {
+          playGameOverSound();
+          // Red flash
+          overlay.style.background = 'rgba(200, 20, 20, 0.3)';
+          setTimeout(() => overlay.style.background = '', 200);
+        }
+
+        // Save high score
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('precisionAimHighScore', highScore);
+          highScoreEl.textContent = highScore;
+        }
+
+        // Show game over UI
+        overlay.classList.remove('hidden');
+        overlayTitle.textContent = hitBad ? '☠ FRIENDLY FIRE ☠' : '⏱ TIME\'S UP!';
+        overlayTitle.className = hitBad ? 'red-text' : 'gold-text';
+        overlaySub[0].textContent = `Final Score: ${score}`;
+        overlaySub[0].style.fontSize = 'clamp(24px, 5vw, 42px)';
+        overlaySub[0].style.fontWeight = '700';
+        overlaySub[1].textContent = `Best Combo: x${maxCombo}`;
+        overlaySub[1].className = 'subtitle';
+        finalScoreEl.style.display = 'none';
+        startBtn.textContent = 'PLAY AGAIN';
+
+        // Spawn big explosion for bad hit
+        if (hitBad) {
+          spawnParticles(W/2, H/2, '#ff2244', 50, 8, 8, 1.0);
+          spawnParticles(W/2, H/2, '#ffaa00', 30, 5, 5, 0.8);
+        }
+      }
+
+      // --- Input Handling ---
+      function getCanvasCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX / window.devicePixelRatio;
+        const y = (e.clientY - rect.top) * scaleY / window.devicePixelRatio;
+        return { x, y };
+      }
+
+      function handleShoot(e) {
+        if (gameState !== STATE.PLAYING) return;
+        const pos = getCanvasCoords(e);
+        const px = pos.x;
+        const py = pos.y;
+
+        // Check targets from front to back (last drawn = last in array = on top)
+        let hit = false;
+        for (let i = targets.length - 1; i >= 0; i--) {
+          const t = targets[i];
+          if (t.alive && t.contains(px, py)) {
+            t.alive = false;
+            spawnTargetExplosion(t.x, t.y, t.isBad);
+            if (t.isBad) {
+              // Bad target hit - game over
+              playMissSound();
+              endGame(true);
+              return;
+            } else {
+              // Good hit
+              playHitSound();
+              combo++;
+              if (combo > maxCombo) maxCombo = combo;
+              let points = 1;
+              if (combo >= 10) {
+                const multiplier = Math.floor(combo / 10) + 1;
+                points = multiplier;
+                if (combo % 10 === 0) {
+                  playComboSound();
+                  spawnParticles(t.x, t.y, '#ffd700', 12, 3, 4, 0.5);
+                }
+              }
+              score += points;
+              scoreEl.textContent = score;
+
+              if (combo >= 10) {
+                comboDisplay.style.display = 'flex';
+                comboVal.textContent = `x${Math.floor(combo/10)+1}`;
+              } else {
+                comboDisplay.style.display = 'none';
+              }
+              hit = true;
+            }
+            break;
+          }
+        }
+
+        if (!hit) {
+          // Miss - reset combo
+          if (combo > 0) {
+            combo = 0;
+            comboDisplay.style.display = 'none';
+            spawnParticles(px, py, '#ffffff33', 5, 2, 2, 0.3);
+          }
+        }
+      }
+
+      // Mouse events
+      canvas.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        handleShoot(e);
+      });
+      canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        crosshair.style.left = mouseX + 'px';
+        crosshair.style.top = mouseY + 'px';
+      });
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Touch events
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        if (touch) {
+          mouseX = touch.clientX;
+          mouseY = touch.clientY;
+          crosshair.style.left = mouseX + 'px';
+          crosshair.style.top = mouseY + 'px';
+          handleShoot(touch);
+        }
+      }, { passive: false });
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        if (touch) {
+          mouseX = touch.clientX;
+          mouseY = touch.clientY;
+          crosshair.style.left = mouseX + 'px';
+          crosshair.style.top = mouseY + 'px';
+        }
+      }, { passive: false });
+
+      // Start button
+      startBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startGame();
+      });
+
+      // --- Game Loop ---
+      function gameLoop(timestamp) {
+        if (!gameRunning && gameState !== STATE.MENU) {
+          // Still render particles if game over
+          if (gameState === STATE.GAMEOVER) {
+            const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
+            lastTime = timestamp;
+            updateParticles(dt);
+            draw();
+            if (particles.length > 0) {
+              requestAnimationFrame(gameLoop);
+            } else {
+              // final draw
+              draw();
+            }
+          }
+          return;
+        }
+        const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
+        lastTime = timestamp;
+
+        if (gameState === STATE.PLAYING) {
+          update(dt);
+        } else if (gameState === STATE.MENU) {
+          // Animate background particles
+          updateParticles(dt);
+        }
+        draw();
+        requestAnimationFrame(gameLoop);
+      }
+
+      function update(dt) {
+        // Update targets
+        for (let i = targets.length - 1; i >= 0; i--) {
+          targets[i].update(dt);
+          if (!targets[i].alive) {
+            // If target expired naturally (not hit), reset combo if it was a good target
+            if (!targets[i].isBad && combo > 0) {
+              combo = 0;
+              comboDisplay.style.display = 'none';
+            }
+            targets.splice(i, 1);
+          }
+        }
+
+        // Limit targets
+        if (targets.length > 25) {
+          targets.splice(0, targets.length - 25);
+        }
+
+        updateParticles(dt);
+      }
+
+      function updateParticles(dt) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          particles[i].update(dt);
+          if (!particles[i].alive) {
+            particles.splice(i, 1);
+          }
+        }
+      }
+
+      // --- Drawing ---
+      function draw() {
+        const displayW = canvas.width / window.devicePixelRatio;
+        const displayH = canvas.height / window.devicePixelRatio;
+        ctx.clearRect(0, 0, displayW, displayH);
+
+        // Background + grid
+        ctx.fillStyle = '#0d0d0d';
+        ctx.fillRect(0, 0, displayW, displayH);
+
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 1;
+        const gridSize = 40 * (displayW/800);
+        for (let x = 0; x < displayW; x += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, displayH);
+          ctx.stroke();
+        }
+        for (let y = 0; y < displayH; y += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(displayW, y);
+          ctx.stroke();
+        }
+
+        // Draw grid glow lines
+        ctx.shadowColor = '#00ff4422';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = '#1a2a1a';
+        ctx.lineWidth = 2;
+        for (let x = 0; x < displayW; x += gridSize*2) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, displayH);
+          ctx.stroke();
+        }
+        for (let y = 0; y < displayH; y += gridSize*2) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(displayW, y);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+
+        // Draw targets
+        for (const t of targets) {
+          t.draw(ctx);
+        }
+
+        // Draw particles
+        for (const p of particles) {
+          p.draw(ctx);
+        }
+
+        // Draw HUD directly on canvas for crispness (overlay also shows)
+        if (gameState === STATE.MENU) {
+          ctx.fillStyle = '#ffffff33';
+          ctx.font = `${Math.floor(displayW/25)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText('Click START to begin', displayW/2, displayH - 40);
+        }
+
+        // Combo indicator on canvas
+        if (gameState === STATE.PLAYING && combo >= 10) {
+          const mult = Math.floor(combo/10) + 1;
+          ctx.save();
+          ctx.shadowColor = '#ffd700';
+          ctx.shadowBlur = 30;
+          ctx.fillStyle = '#ffd700';
+          ctx.font = `bold ${Math.floor(displayW/15)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText(`🔥 x${mult}`, displayW/2, 40);
+          ctx.restore();
+        }
+      }
+
+      // --- Menu Animation ---
+      function menuLoop() {
+        if (gameState !== STATE.MENU) return;
+        // Spawn some ambient particles
+        if (Math.random() < 0.1) {
+          particles.push(new Particle(
+            Math.random() * W,
+            H + 10,
+            '#33ff7744', 0.5 + Math.random()*1, 2 + Math.random()*3, 1.5
+          ));
+        }
+        requestAnimationFrame(menuLoop);
+      }
+
+      // --- Init Menu ---
+      overlay.classList.remove('hidden');
+      overlayTitle.textContent = 'Precision Aim';
+      overlayTitle.className = 'green-text';
+      overlaySub[0].textContent = 'Hit green targets · Avoid red ones';
+      overlaySub[1].textContent = 'Combo multiplier after 10 consecutive hits';
+      startBtn.textContent = 'START GAME';
+      finalScoreEl.style.display = 'none';
+      gameState = STATE.MENU;
+      gameRunning = false;
+
+      // Start menu animation
+      lastTime = performance.now();
+      menuLoop();
+      requestAnimationFrame(gameLoop);
+
+      // Handle window resize for crosshair
+      window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        crosshair.style.left = mouseX + 'px';
+        crosshair.style.top = mouseY + 'px';
+      });
+
+      // Show crosshair only when in container
+      document.addEventListener('mouseleave', () => {
+        crosshair.style.opacity = '0';
+      });
+      document.addEventListener('mouseenter', () => {
+        crosshair.style.opacity = '0.85';
+      });
+
+      console.log('Precision Aim Trainer loaded. High score:', highScore);
+    })();
+  </script>
+</body>
+</html>

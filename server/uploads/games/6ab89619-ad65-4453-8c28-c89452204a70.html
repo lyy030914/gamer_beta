@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Coin Catcher Quest</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .game-container {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            max-width: 900px;
+            width: 95%;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 12px;
+            background: #87CEEB;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .ctrl-btn {
+            background: #0f3460;
+            border: none;
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            padding: 12px 28px;
+            border-radius: 50px;
+            box-shadow: 0 6px 0 #091a2e;
+            touch-action: manipulation;
+            cursor: pointer;
+            transition: all 0.05s;
+            min-width: 70px;
+            text-align: center;
+        }
+        .ctrl-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 1px 0 #091a2e;
+        }
+        .ctrl-btn.jump {
+            background: #e94560;
+            box-shadow: 0 6px 0 #b32e45;
+        }
+        .ctrl-btn.left { background: #1a1a2e; box-shadow: 0 6px 0 #0f0f1a; }
+        .ctrl-btn.right { background: #1a1a2e; box-shadow: 0 6px 0 #0f0f1a; }
+        @media (min-width: 768px) {
+            .controls { display: none; }
+        }
+        @media (max-width: 767px) {
+            .ctrl-btn { font-size: 24px; padding: 10px 20px; min-width: 60px; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div class="controls" id="touchControls">
+        <button class="ctrl-btn left" id="btnLeft">◀</button>
+        <button class="ctrl-btn jump" id="btnJump">▲</button>
+        <button class="ctrl-btn right" id="btnRight">▶</button>
+    </div>
+</div>
+<script>
+    (function() {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ---- Responsive sizing ----
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            // Keep aspect ratio 800:500
+            canvas.width = 800;
+            canvas.height = 500;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // ---- Audio (Web Audio beeps) ----
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioCtx();
+            }
+        }
+
+        function playBeep(freq, duration, type = 'square', volume = 0.15) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) { /* silent fail */ }
+        }
+
+        function coinSound() { playBeep(880, 0.12, 'sine', 0.2); }
+        function jumpSound() { playBeep(440, 0.1, 'square', 0.1); }
+        function hurtSound() { playBeep(180, 0.3, 'sawtooth', 0.2); }
+        function winSound() {
+            setTimeout(() => playBeep(523, 0.15, 'sine', 0.2), 0);
+            setTimeout(() => playBeep(659, 0.15, 'sine', 0.2), 150);
+            setTimeout(() => playBeep(784, 0.25, 'sine', 0.25), 300);
+        }
+        function loseSound() {
+            setTimeout(() => playBeep(300, 0.2, 'sawtooth', 0.15), 0);
+            setTimeout(() => playBeep(200, 0.4, 'sawtooth', 0.15), 200);
+        }
+
+        // ---- Game Constants ----
+        const GRAVITY = 0.6;
+        const PLAYER_SPEED = 4.5;
+        const JUMP_FORCE = -11;
+        const PLAYER_WIDTH = 28;
+        const PLAYER_HEIGHT = 34;
+        const COIN_SIZE = 16;
+        const SPIKE_HEIGHT = 18;
+        const MAX_LIVES = 3;
+
+        // ---- Game State ----
+        let gameState = 'start'; // 'start', 'playing', 'gameover', 'win'
+        let score = 0;
+        let lives = MAX_LIVES;
+        let coinsCollected = 0;
+        let totalCoins = 0;
+
+        // ---- Input ----
+        const keys = { left: false, right: false, jump: false, jumpPressed: false };
+        let touchLeft = false, touchRight = false, touchJump = false;
+
+        // ---- Player ----
+        const player = {
+            x: 60, y: 300, w: PLAYER_WIDTH, h: PLAYER_HEIGHT,
+            vx: 0, vy: 0,
+            onGround: false,
+            jumpHeld: false,
+            jumpTimer: 0,
+            facing: 1
+        };
+
+        // ---- Level Data ----
+        let platforms = [];
+        let coins = [];
+        let spikes = [];
+        let particles = [];
+        let coinPickupAnimations = [];
+
+        // ---- Camera ----
+        let cameraX = 0;
+        const LEVEL_WIDTH = 1600;
+
+        // ---- Build Level ----
+        function buildLevel() {
+            platforms = [
+                // Ground (with gaps for spikes)
+                { x: 0, y: 460, w: 300, h: 40 },
+                { x: 380, y: 460, w: 400, h: 40 },
+                { x: 860, y: 460, w: 300, h: 40 },
+                { x: 1240, y: 460, w: 400, h: 40 },
+                // Platforms
+                { x: 200, y: 340, w: 120, h: 20 },
+                { x: 480, y: 300, w: 100, h: 20 },
+                { x: 640, y: 360, w: 140, h: 20 },
+                { x: 900, y: 310, w: 120, h: 20 },
+                { x: 1100, y: 370, w: 100, h: 20 },
+                { x: 1350, y: 320, w: 130, h: 20 },
+                { x: 100, y: 220, w: 90, h: 20 },
+                { x: 600, y: 220, w: 120, h: 20 },
+                { x: 1000, y: 200, w: 100, h: 20 },
+                { x: 1450, y: 240, w: 100, h: 20 },
+            ];
+
+            spikes = [
+                { x: 300, y: 440, w: 80, h: SPIKE_HEIGHT },
+                { x: 780, y: 440, w: 80, h: SPIKE_HEIGHT },
+                { x: 1160, y: 440, w: 80, h: SPIKE_HEIGHT },
+                { x: 1640, y: 440, w: 80, h: SPIKE_HEIGHT },
+                // Additional spike pits
+                { x: 0, y: 440, w: 0, h: SPIKE_HEIGHT }, // dummy
+            ];
+            // Remove dummy
+            spikes = spikes.filter(s => s.w > 0);
+
+            coins = [];
+            // Scatter coins
+            const coinPositions = [
+                [120, 430], [180, 430], [250, 430],
+                [220, 310], [280, 310],
+                [420, 430], [480, 430], [550, 430], [620, 430],
+                [500, 270], [560, 270],
+                [660, 330], [720, 330],
+                [900, 430], [970, 430], [1040, 430],
+                [920, 280], [980, 280],
+                [1150, 340], [1210, 340],
+                [1280, 430], [1350, 430], [1420, 430],
+                [1370, 290], [1430, 290],
+                [120, 190], [160, 190],
+                [620, 190], [680, 190],
+                [1020, 170], [1060, 170],
+                [1470, 210], [1520, 210],
+                [750, 430], [800, 430],
+                [300, 200], [350, 200],
+            ];
+            coinPositions.forEach(pos => {
+                coins.push({ x: pos[0], y: pos[1], collected: false, bobOffset: Math.random() * Math.PI * 2 });
+            });
+            totalCoins = coins.length;
+            coinsCollected = 0;
+        }
+
+        // ---- Particle System ----
+        function spawnParticles(x, y, color, count = 12, speed = 3) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = Math.random() * speed + 0.5;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * spd,
+                    vy: Math.sin(angle) * spd - 1,
+                    life: 1.0,
+                    decay: 0.015 + Math.random() * 0.02,
+                    size: 3 + Math.random() * 5,
+                    color: color
+                });
+            }
+        }
+
+        function spawnCoinPickup(x, y) {
+            coinPickupAnimations.push({ x, y, life: 1.0, vy: -3 });
+            spawnParticles(x, y, '#FFD700', 15, 4);
+            coinSound();
+        }
+
+        function spawnDeathParticles(x, y) {
+            spawnParticles(x, y, '#FF4444', 25, 5);
+            spawnParticles(x, y, '#FFAA00', 15, 3);
+        }
+
+        // ---- Reset Functions ----
+        function resetPlayer() {
+            player.x = 60;
+            player.y = 300;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.jumpHeld = false;
+            player.jumpTimer = 0;
+        }
+
+        function resetLevel() {
+            coins.forEach(c => c.collected = false);
+            coinsCollected = 0;
+            resetPlayer();
+            particles = [];
+            coinPickupAnimations = [];
+            cameraX = 0;
+        }
+
+        function startGame() {
+            score = 0;
+            lives = MAX_LIVES;
+            buildLevel();
+            resetLevel();
+            gameState = 'playing';
+        }
+
+        // ---- Collision Detection ----
+        function rectCollide(a, b) {
+            return a.x < b.x + b.w && a.x + a.w > b.x &&
+                   a.y < b.y + b.h && a.y + a.h > b.y;
+        }
+
+        function pointInRect(px, py, r) {
+            return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+        }
+
+        // ---- Update ----
+        function update() {
+            if (gameState !== 'playing') return;
+
+            // ---- Player Input ----
+            let moveLeft = keys.left || touchLeft;
+            let moveRight = keys.right || touchRight;
+            let jumpInput = keys.jumpPressed || touchJump;
+            if (jumpInput) {
+                // consume jump press
+                keys.jumpPressed = false;
+                touchJump = false;
+            }
+
+            // Horizontal movement
+            if (moveLeft) {
+                player.vx = -PLAYER_SPEED;
+                player.facing = -1;
+            } else if (moveRight) {
+                player.vx = PLAYER_SPEED;
+                player.facing = 1;
+            } else {
+                player.vx *= 0.7;
+                if (Math.abs(player.vx) < 0.3) player.vx = 0;
+            }
+
+            // Jump
+            if (jumpInput && player.onGround) {
+                player.vy = JUMP_FORCE;
+                player.onGround = false;
+                player.jumpHeld = true;
+                player.jumpTimer = 0;
+                jumpSound();
+            }
+            // Variable jump height: if jump held and still going up, allow a bit more height
+            if (player.jumpHeld && player.vy < 0 && player.jumpTimer < 12) {
+                // small boost
+                player.vy -= 0.3;
+                player.jumpTimer++;
+            }
+            if (!jumpInput) {
+                player.jumpHeld = false;
+            }
+
+            // Gravity
+            player.vy += GRAVITY;
+            if (player.vy > 12) player.vy = 12;
+
+            // ---- Move & Collide X ----
+            player.x += player.vx;
+            // Clamp to level
+            if (player.x < 0) { player.x = 0; player.vx = 0; }
+            if (player.x + player.w > LEVEL_WIDTH) { player.x = LEVEL_WIDTH - player.w; player.vx = 0; }
+
+            // Platform collision X
+            for (let p of platforms) {
+                if (rectCollide(player, p)) {
+                    if (player.vx > 0) {
+                        player.x = p.x - player.w;
+                    } else if (player.vx < 0) {
+                        player.x = p.x + p.w;
+                    }
+                    player.vx = 0;
+                }
+            }
+
+            // ---- Move & Collide Y ----
+            player.y += player.vy;
+            player.onGround = false;
+
+            for (let p of platforms) {
+                if (rectCollide(player, p)) {
+                    if (player.vy > 0) {
+                        // Landing
+                        player.y = p.y - player.h;
+                        player.vy = 0;
+                        player.onGround = true;
+                    } else if (player.vy < 0) {
+                        // Hit head
+                        player.y = p.y + p.h;
+                        player.vy = 0;
+                    }
+                }
+            }
+
+            // Fall off bottom of level -> death
+            if (player.y > 520) {
+                playerDie();
+                return;
+            }
+
+            // ---- Spike Collision ----
+            for (let s of spikes) {
+                // Spike is a triangle, approximate with rect
+                const spikeRect = { x: s.x, y: s.y, w: s.w, h: s.h };
+                if (rectCollide(player, spikeRect)) {
+                    playerDie();
+                    return;
+                }
+            }
+
+            // ---- Coin Collection ----
+            for (let coin of coins) {
+                if (coin.collected) continue;
+                const coinRect = { x: coin.x - COIN_SIZE/2, y: coin.y - COIN_SIZE/2, w: COIN_SIZE, h: COIN_SIZE };
+                if (rectCollide(player, coinRect)) {
+                    coin.collected = true;
+                    coinsCollected++;
+                    score += 100;
+                    spawnCoinPickup(coin.x, coin.y);
+                }
+            }
+
+            // ---- Win Condition ----
+            if (coinsCollected >= totalCoins) {
+                gameState = 'win';
+                winSound();
+                return;
+            }
+
+            // ---- Update Particles ----
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.1;
+                p.life -= p.decay;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // ---- Update Coin Pickup Animations ----
+            for (let i = coinPickupAnimations.length - 1; i >= 0; i--) {
+                const a = coinPickupAnimations[i];
+                a.y += a.vy;
+                a.vy += 0.15;
+                a.life -= 0.02;
+                if (a.life <= 0) {
+                    coinPickupAnimations.splice(i, 1);
+                }
+            }
+
+            // ---- Camera ----
+            cameraX = player.x - canvas.width/2 + player.w/2;
+            if (cameraX < 0) cameraX = 0;
+            if (cameraX > LEVEL_WIDTH - canvas.width) cameraX = LEVEL_WIDTH - canvas.width;
+        }
+
+        function playerDie() {
+            lives--;
+            hurtSound();
+            spawnDeathParticles(player.x + player.w/2, player.y + player.h/2);
+            if (lives <= 0) {
+                gameState = 'gameover';
+                loseSound();
+            } else {
+                // Respawn
+                resetPlayer();
+                // Reset coins? Spec says coins respawn when player dies
+                coins.forEach(c => c.collected = false);
+                coinsCollected = 0;
+                cameraX = 0;
+            }
+        }
+
+        // ---- Draw ----
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Sky gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGrad.addColorStop(0, '#4FC3F7');
+            skyGrad.addColorStop(0.6, '#81D4FA');
+            skyGrad.addColorStop(1, '#B3E5FC');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Clouds
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            for (let i = 0; i < 8; i++) {
+                const cx = (i * 220 + 50) - cameraX * 0.2;
+                const cy = 40 + (i % 3) * 30;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 30, 0, Math.PI*2);
+                ctx.arc(cx+35, cy-10, 25, 0, Math.PI*2);
+                ctx.arc(cx+70, cy, 30, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            ctx.save();
+            ctx.translate(-cameraX, 0);
+
+            // ---- Platforms ----
+            for (let p of platforms) {
+                // Grass top
+                ctx.fillStyle = '#5D4037';
+                ctx.fillRect(p.x, p.y + p.h - 6, p.w, 6);
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(p.x, p.y, p.w, p.h - 6);
+                // Grass tufts
+                ctx.fillStyle = '#388E3C';
+                for (let i = 0; i < p.w; i += 12) {
+                    ctx.fillRect(p.x + i, p.y - 3, 4, 6);
+                }
+                // Top highlight
+                ctx.fillStyle = '#66BB6A';
+                ctx.fillRect(p.x, p.y, p.w, 4);
+            }
+
+            // ---- Spikes (dangerous pits) ----
+            for (let s of spikes) {
+                ctx.fillStyle = '#D32F2F';
+                // Draw triangular spikes
+                const count = Math.floor(s.w / 16);
+                for (let i = 0; i < count; i++) {
+                    const sx = s.x + i * 16;
+                    const sy = s.y;
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy + s.h);
+                    ctx.lineTo(sx + 8, sy);
+                    ctx.lineTo(sx + 16, sy + s.h);
+                    ctx.closePath();
+                    ctx.fillStyle = '#C62828';
+                    ctx.fill();
+                    ctx.strokeStyle = '#B71C1C';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                // Red glow
+                ctx.fillStyle = 'rgba(255,0,0,0.15)';
+                ctx.fillRect(s.x, s.y, s.w, s.h);
+            }
+
+            // ---- Coins ----
+            const time = Date.now() / 300;
+            for (let coin of coins) {
+                if (coin.collected) continue;
+                const cx = coin.x;
+                const cy = coin.y + Math.sin(time + coin.bobOffset) * 3;
+                // Glow
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 12;
+                // Coin body
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, COIN_SIZE/2, COIN_SIZE/2.2, 0, 0, Math.PI*2);
+                ctx.fillStyle = '#FFD700';
+                ctx.fill();
+                ctx.strokeStyle = '#F9A825';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Inner circle
+                ctx.beginPath();
+                ctx.ellipse(cx-1, cy-1, COIN_SIZE/3.5, COIN_SIZE/4, 0, 0, Math.PI*2);
+                ctx.fillStyle = '#FFEE58';
+                ctx.fill();
+                // Dollar sign
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#F57F17';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$', cx, cy+1);
+                ctx.shadowBlur = 0;
+            }
+            ctx.shadowBlur = 0;
+
+            // ---- Coin Pickup Animations ----
+            for (let a of coinPickupAnimations) {
+                ctx.globalAlpha = a.life;
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, 8 * a.life, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FFF176';
+                ctx.beginPath();
+                ctx.arc(a.x-1, a.y-1, 4 * a.life, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            // ---- Player ----
+            const px = player.x, py = player.y;
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(px + player.w/2, py + player.h + 2, 14, 4, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            // Body (pixel hero)
+            ctx.fillStyle = '#1565C0';
+            ctx.fillRect(px + 4, py + 12, 20, 18);
+            // Head
+            ctx.fillStyle = '#FFCC80';
+            ctx.fillRect(px + 6, py + 2, 16, 14);
+            // Eyes
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(px + 9, py + 6, 4, 4);
+            ctx.fillRect(px + 15, py + 6, 4, 4);
+            // Eye shine
+            ctx.fillStyle = 'white';
+            ctx.fillRect(px + 10, py + 7, 2, 2);
+            ctx.fillRect(px + 16, py + 7, 2, 2);
+            // Smile
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(px + 14, py + 13, 4, 0.1, Math.PI - 0.1);
+            ctx.stroke();
+            // Hair
+            ctx.fillStyle = '#5D4037';
+            ctx.fillRect(px + 6, py, 16, 4);
+            // Hat
+            ctx.fillStyle = '#E53935';
+            ctx.fillRect(px + 4, py - 2, 20, 6);
+            ctx.fillRect(px + 2, py + 2, 24, 3);
+            // Legs
+            ctx.fillStyle = '#0D47A1';
+            ctx.fillRect(px + 6, py + 30, 6, 4);
+            ctx.fillRect(px + 16, py + 30, 6, 4);
+            // Shoes
+            ctx.fillStyle = '#4E342E';
+            ctx.fillRect(px + 4, py + 32, 8, 4);
+            ctx.fillRect(px + 16, py + 32, 8, 4);
+            // Arms
+            ctx.fillStyle = '#FFCC80';
+            ctx.fillRect(px - 2, py + 16, 6, 4);
+            ctx.fillRect(px + 24, py + 16, 6, 4);
+            // Cape (back)
+            ctx.fillStyle = '#E53935';
+            ctx.fillRect(px + 2, py + 8, 4, 20);
+
+            // ---- Particles ----
+            for (let p of particles) {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            ctx.restore();
+
+            // ---- UI Overlay ----
+            // Top bar
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, canvas.width, 50);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 22px "Segoe UI", Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            // Lives (hearts)
+            ctx.fillStyle = '#E53935';
+            for (let i = 0; i < lives; i++) {
+                ctx.font = '22px Arial';
+                ctx.fillText('♥', 15 + i * 30, 25);
+            }
+            // Score
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 20px "Segoe UI", Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🪙 ' + coinsCollected + '/' + totalCoins, canvas.width/2, 25);
+            // Coin count text
+            ctx.fillStyle = 'white';
+            ctx.font = '16px "Segoe UI", Arial';
+            ctx.fillText('Score: ' + score, canvas.width - 120, 25);
+
+            // ---- Start Screen ----
+            if (gameState === 'start') {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 48px "Segoe UI", Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🪙 Coin Catcher Quest', canvas.width/2, canvas.height/2 - 60);
+                ctx.fillStyle = 'white';
+                ctx.font = '24px "Segoe UI", Arial';
+                ctx.fillText('Collect all coins! Avoid spikes!', canvas.width/2, canvas.height/2 + 10);
+                ctx.fillStyle = '#81C784';
+                ctx.font = '20px "Segoe UI", Arial';
+                ctx.fillText('Press SPACE or Tap to Start', canvas.width/2, canvas.height/2 + 60);
+                ctx.fillStyle = '#B0BEC5';
+                ctx.font = '16px "Segoe UI", Arial';
+                ctx.fillText('Arrow Keys / A,D to move | Space / Up to jump', canvas.width/2, canvas.height/2 + 100);
+            }
+
+            // ---- Game Over Screen ----
+            if (gameState === 'gameover') {
+                ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#E53935';
+                ctx.font = 'bold 56px "Segoe UI", Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('💀 Game Over', canvas.width/2, canvas.height/2 - 50);
+                ctx.fillStyle = 'white';
+                ctx.font = '28px "Segoe UI", Arial';
+                ctx.fillText('Coins: ' + coinsCollected + '/' + totalCoins, canvas.width/2, canvas.height/2 + 20);
+                ctx.fillStyle = '#FFD700';
+                ctx.font = '22px "Segoe UI", Arial';
+                ctx.fillText('Score: ' + score, canvas.width/2, canvas.height/2 + 60);
+                ctx.fillStyle = '#81C784';
+                ctx.font = '20px "Segoe UI", Arial';
+                ctx.fillText('Press SPACE or Tap to Restart', canvas.width/2, canvas.height/2 + 110);
+            }
+
+            // ---- Win Screen ----
+            if (gameState === 'win') {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 56px "Segoe UI", Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🎉 You Win!', canvas.width/2, canvas.height/2 - 50);
+                ctx.fillStyle = 'white';
+                ctx.font = '28px "Segoe UI", Arial';
+                ctx.fillText('All coins collected!', canvas.width/2, canvas.height/2 + 20);
+                ctx.fillStyle = '#FFD700';
+                ctx.font = '22px "Segoe UI", Arial';
+                ctx.fillText('Final Score: ' + score, canvas.width/2, canvas.height/2 + 60);
+                ctx.fillStyle = '#81C784';
+                ctx.font = '20px "Segoe UI", Arial';
+                ctx.fillText('Press SPACE or Tap to Play Again', canvas.width/2, canvas.height/2 + 110);
+            }
+        }
+
+        // ---- Game Loop ----
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ---- Input Handlers ----
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+            if (e.key === ' ' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (gameState === 'start' || gameState === 'gameover' || gameState === 'win') {
+                    startGame();
+                    return;
+                }
+                keys.jumpPressed = true;
+                touchJump = false; // avoid double trigger
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+            if (e.key === ' ' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                keys.jumpPressed = false;
+            }
+        });
+
+        // Touch / Mouse
+        function handleCanvasTap(e) {
+            e.preventDefault();
+            if (gameState === 'start' || gameState === 'gameover' || gameState === 'win') {
+                startGame();
+                return;
+            }
+            // Also trigger jump on tap
+            keys.jumpPressed = true;
+            setTimeout(() => { keys.jumpPressed = false; }, 100);
+        }
+        canvas.addEventListener('click', handleCanvasTap);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleCanvasTap(e);
+        });
+
+        // Touch controls
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnJump = document.getElementById('btnJump');
+
+        function addTouchListeners(el, onStart, onEnd) {
+            el.addEventListener('mousedown', (e) => { e.preventDefault(); onStart(); });
+            el.addEventListener('mouseup', (e) => { e.preventDefault(); onEnd(); });
+            el.addEventListener('mouseleave', (e) => { e.preventDefault(); onEnd(); });
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); onStart(); }, { passive: false });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); onEnd(); }, { passive: false });
+            el.addEventListener('touchcancel', (e) => { e.preventDefault(); onEnd(); }, { passive: false });
+        }
+
+        addTouchListeners(btnLeft, () => { touchLeft = true; }, () => { touchLeft = false; });
+        addTouchListeners(btnRight, () => { touchRight = true; }, () => { touchRight = false; });
+        addTouchListeners(btnJump, () => {
+            if (gameState === 'start' || gameState === 'gameover' || gameState === 'win') {
+                startGame();
+                return;
+            }
+            touchJump = true;
+            keys.jumpPressed = false; // avoid conflict
+        }, () => {
+            touchJump = false;
+        });
+
+        // ---- Prevent scrolling on mobile ----
+        document.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+
+        // ---- Start Game Loop ----
+        gameLoop();
+
+        // Initial draw
+        draw();
+
+        // Show start screen
+        gameState = 'start';
+        buildLevel();
+        resetPlayer();
+    })();
+</script>
+</body>
+</html>

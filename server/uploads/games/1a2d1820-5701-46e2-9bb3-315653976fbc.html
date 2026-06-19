@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Coin Dash</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #1a1a2e; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 800 / 500;
+            border: 4px solid #e94560;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(233, 69, 96, 0.5);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #87CEEB;
+        }
+        #ui {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            pointer-events: none;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        #score, #highScore {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.4);
+            padding: 4px 12px;
+            border-radius: 8px;
+            pointer-events: auto;
+        }
+        #highScore {
+            font-size: 18px;
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.6);
+            pointer-events: auto;
+            transition: opacity 0.3s;
+        }
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay h1 {
+            color: #FFD700;
+            font-size: 56px;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+        #overlay .sub {
+            color: #eee;
+            font-size: 20px;
+            margin-bottom: 30px;
+        }
+        #overlay .controls {
+            color: #ccc;
+            font-size: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        #overlay button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.5);
+        }
+        #overlay button:hover {
+            transform: scale(1.05);
+            background: #ff6b81;
+        }
+        #overlay .gameover-score {
+            color: #FFD700;
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        #overlay .gameover-high {
+            color: #aaa;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 600px) {
+            #overlay h1 { font-size: 36px; }
+            #overlay .sub { font-size: 16px; }
+            #overlay button { padding: 12px 30px; font-size: 20px; }
+            #score { font-size: 20px; }
+            #highScore { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="highScore">Best: 0</div>
+    </div>
+    <div id="overlay">
+        <h1>COIN DASH</h1>
+        <div class="sub">Collect coins, avoid the void!</div>
+        <div class="controls">
+            Arrow Keys / WASD to move<br>
+            Space or Up/W to jump
+        </div>
+        <button id="startBtn">START GAME</button>
+    </div>
+</div>
+<script>
+    (function() {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const highScoreEl = document.getElementById('highScore');
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('startBtn');
+
+        const W = 800, H = 500;
+        canvas.width = W; canvas.height = H;
+
+        // Game state
+        let state = 'menu'; // 'menu', 'playing', 'gameover'
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('coindash_high')) || 0;
+        highScoreEl.textContent = 'Best: ' + highScore;
+
+        // Input
+        const keys = { left: false, right: false, jump: false };
+        let jumpPressed = false;
+
+        // Player
+        const player = {
+            x: 100, y: 300, w: 30, h: 36,
+            vx: 0, vy: 0,
+            speed: 280,
+            jumpForce: -520,
+            gravity: 1400,
+            onGround: false,
+            jumpHold: false,
+            jumpTimer: 0
+        };
+
+        // Platforms
+        let platforms = [];
+        // Coins
+        let coins = [];
+        // Particles
+        let particles = [];
+
+        // Timing
+        let difficultyTimer = 0;
+        let difficultyLevel = 0;
+        const DIFFICULTY_INTERVAL = 15; // seconds
+
+        // Camera offset (for smooth follow)
+        let cameraY = 0;
+        const CAMERA_SMOOTH = 0.1;
+
+        // Coin shimmer phase
+        let shimmerPhase = 0;
+
+        // Audio context
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        function playTone(freq, duration, type = 'square', volume = 0.15) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+        function playCoinSound() { playTone(880, 0.1, 'square', 0.12); setTimeout(() => playTone(1320, 0.15, 'square', 0.08), 80); }
+        function playJumpSound() { playTone(300, 0.12, 'triangle', 0.1); }
+        function playFallSound() { playTone(200, 0.3, 'sawtooth', 0.1); playTone(120, 0.4, 'sawtooth', 0.08); }
+        function playMenuSelect() { playTone(660, 0.1, 'square', 0.08); }
+
+        // --- Platform Generation ---
+        function generatePlatforms() {
+            platforms = [];
+            const baseY = 350;
+            // Starting platform (wide)
+            platforms.push({ x: 50, y: baseY, w: 200, h: 18, moving: false, startX: 50, range: 0, speed: 0 });
+
+            // Generate a set of platforms upward
+            let prevY = baseY;
+            let prevX = 250;
+            for (let i = 0; i < 12; i++) {
+                let w = 80 + Math.random() * 120;
+                if (i % 3 === 0) w = 160 + Math.random() * 80; // bigger platforms
+                let gapX = 60 + Math.random() * 100;
+                let x = prevX + gapX;
+                if (x + w > W - 20) x = W - w - 20;
+                if (x < 20) x = 20;
+                let y = prevY - (60 + Math.random() * 80);
+                if (y < 30) y = 30;
+                let moving = false;
+                let range = 0, speed = 0;
+                // moving platforms appear after difficulty
+                if (difficultyLevel >= 1 && i % 4 === 0 && i > 2) {
+                    moving = true;
+                    range = 60 + Math.random() * 100;
+                    speed = 40 + Math.random() * 60;
+                }
+                platforms.push({ x, y, w, h: 18, moving, startX: x, range, speed, dir: 1 });
+                prevX = x;
+                prevY = y;
+            }
+            // Ensure at least one platform near top
+            if (prevY > 80) {
+                platforms.push({ x: 100 + Math.random()*400, y: 30, w: 140, h: 18, moving: false, startX: 0, range: 0, speed: 0 });
+            }
+        }
+
+        // --- Coin Generation ---
+        function generateCoins() {
+            coins = [];
+            for (let p of platforms) {
+                // 1-2 coins per platform
+                let count = 1 + Math.floor(Math.random() * 2);
+                for (let i = 0; i < count; i++) {
+                    let cx = p.x + 10 + Math.random() * (p.w - 20);
+                    let cy = p.y - 20 - Math.random() * 10;
+                    coins.push({ x: cx, y: cy, r: 10, collected: false, respawnTimer: 0 });
+                }
+            }
+        }
+
+        // --- Particles ---
+        function spawnParticles(x, y, count, color, spread = 80) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * spread,
+                    vy: -Math.random() * spread * 0.8 - 30,
+                    life: 0.6 + Math.random() * 0.5,
+                    maxLife: 0.6 + Math.random() * 0.5,
+                    size: 3 + Math.random() * 5,
+                    color: color
+                });
+            }
+        }
+
+        function spawnCoinParticles(x, y) {
+            spawnParticles(x, y, 12, '#FFD700', 100);
+            spawnParticles(x, y, 6, '#FFF8DC', 60);
+        }
+
+        function spawnFallParticles(x, y) {
+            spawnParticles(x, y, 20, '#e94560', 150);
+            spawnParticles(x, y, 10, '#ff6b81', 100);
+        }
+
+        // --- Reset Game ---
+        function resetGame() {
+            score = 0;
+            scoreEl.textContent = 'Score: 0';
+            player.x = 100;
+            player.y = 300;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            difficultyTimer = 0;
+            difficultyLevel = 0;
+            cameraY = 0;
+            particles = [];
+            generatePlatforms();
+            generateCoins();
+            state = 'playing';
+            overlay.classList.add('hidden');
+        }
+
+        // --- Collision Detection ---
+        function rectCollide(ax, ay, aw, ah, bx, by, bw, bh) {
+            return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+        }
+
+        // --- Update ---
+        function update(dt) {
+            if (state !== 'playing') return;
+
+            shimmerPhase += dt * 3;
+
+            // Difficulty timer
+            difficultyTimer += dt;
+            if (difficultyTimer >= DIFFICULTY_INTERVAL) {
+                difficultyTimer = 0;
+                difficultyLevel++;
+                // Regenerate platforms with new difficulty
+                generatePlatforms();
+                generateCoins();
+                // Keep player position valid
+                if (player.y > 450) player.y = 300;
+            }
+
+            // Player input
+            let moveX = 0;
+            if (keys.left) moveX = -1;
+            if (keys.right) moveX = 1;
+
+            player.vx = moveX * player.speed;
+
+            // Jump
+            if ((keys.jump || jumpPressed) && player.onGround) {
+                player.vy = player.jumpForce;
+                player.onGround = false;
+                player.jumpTimer = 0.15;
+                playJumpSound();
+            }
+            jumpPressed = false;
+
+            // Variable jump height: if release jump early, cut velocity
+            if (!keys.jump && !jumpPressed && player.vy < -100) {
+                player.vy *= 0.65;
+            }
+
+            // Gravity
+            player.vy += player.gravity * dt;
+
+            // Move player
+            player.x += player.vx * dt;
+            player.y += player.vy * dt;
+
+            // Clamp horizontal
+            if (player.x < 0) { player.x = 0; player.vx = 0; }
+            if (player.x + player.w > W) { player.x = W - player.w; player.vx = 0; }
+
+            // Platform collision
+            player.onGround = false;
+            for (let p of platforms) {
+                // Update moving platforms
+                if (p.moving) {
+                    p.x += p.speed * p.dir * dt;
+                    if (p.x > p.startX + p.range) { p.x = p.startX + p.range; p.dir = -1; }
+                    if (p.x < p.startX - p.range) { p.x = p.startX - p.range; p.dir = 1; }
+                }
+
+                // Collision check (only from top)
+                if (player.vy >= 0 &&
+                    player.x + player.w > p.x + 5 && player.x < p.x + p.w - 5 &&
+                    player.y + player.h > p.y && player.y + player.h < p.y + p.h + 15) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.onGround = true;
+                }
+            }
+
+            // Coin collection
+            for (let c of coins) {
+                if (c.collected) {
+                    c.respawnTimer -= dt;
+                    if (c.respawnTimer <= 0) {
+                        // Respawn on a random platform
+                        let p = platforms[Math.floor(Math.random() * platforms.length)];
+                        if (p) {
+                            c.x = p.x + 10 + Math.random() * (p.w - 20);
+                            c.y = p.y - 20 - Math.random() * 10;
+                            c.collected = false;
+                        }
+                    }
+                    continue;
+                }
+                // Check distance
+                let dx = (player.x + player.w/2) - c.x;
+                let dy = (player.y + player.h/2) - c.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < c.r + 16) {
+                    c.collected = true;
+                    c.respawnTimer = 1.5 + Math.random() * 1.0;
+                    score++;
+                    scoreEl.textContent = 'Score: ' + score;
+                    playCoinSound();
+                    spawnCoinParticles(c.x, c.y);
+                    // Update high score
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('coindash_high', highScore);
+                        highScoreEl.textContent = 'Best: ' + highScore;
+                    }
+                }
+            }
+
+            // Fall off screen
+            if (player.y > H + 20) {
+                playFallSound();
+                spawnFallParticles(player.x + player.w/2, H);
+                state = 'gameover';
+                overlay.classList.remove('hidden');
+                overlay.innerHTML = `
+                    <h1>GAME OVER</h1>
+                    <div class="gameover-score">Score: ${score}</div>
+                    <div class="gameover-high">Best: ${highScore}</div>
+                    <div class="controls">Press SPACE or click to restart</div>
+                    <button id="restartBtn">PLAY AGAIN</button>
+                `;
+                document.getElementById('restartBtn').addEventListener('click', () => {
+                    playMenuSelect();
+                    resetGame();
+                });
+                document.addEventListener('keydown', restartHandler);
+                return;
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 600 * dt;
+                p.life -= dt;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Camera follow (smooth)
+            let targetCam = Math.min(0, player.y - 200);
+            if (targetCam > 0) targetCam = 0;
+            cameraY += (targetCam - cameraY) * CAMERA_SMOOTH;
+        }
+
+        // --- Drawing ---
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // Sky gradient
+            let grad = ctx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, '#4facfe');
+            grad.addColorStop(0.6, '#87CEEB');
+            grad.addColorStop(1, '#b8e6ff');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Clouds
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            let cloudTime = Date.now() / 10000;
+            for (let i = 0; i < 6; i++) {
+                let cx = (i * 150 + cloudTime * 30 * (0.5 + i * 0.2)) % (W + 200) - 100;
+                let cy = 30 + i * 20 + Math.sin(i * 2 + cloudTime) * 15;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 30 + i * 5, 0, Math.PI * 2);
+                ctx.arc(cx + 30, cy - 10, 25 + i * 4, 0, Math.PI * 2);
+                ctx.arc(cx + 60, cy, 28 + i * 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.save();
+            ctx.translate(0, cameraY);
+
+            // Draw platforms
+            for (let p of platforms) {
+                // Platform body
+                let grad2 = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+                grad2.addColorStop(0, '#4CAF50');
+                grad2.addColorStop(0.5, '#388E3C');
+                grad2.addColorStop(1, '#2E7D32');
+                ctx.fillStyle = grad2;
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.shadowBlur = 0;
+
+                // Top highlight
+                ctx.fillStyle = '#66BB6A';
+                ctx.fillRect(p.x, p.y, p.w, 4);
+
+                // Moving indicator
+                if (p.moving) {
+                    ctx.fillStyle = '#FFD700';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('⇄', p.x + p.w/2 - 6, p.y - 5);
+                }
+            }
+
+            // Draw coins
+            for (let c of coins) {
+                if (c.collected) continue;
+                // Shimmer effect
+                let shimmer = Math.sin(shimmerPhase + c.x * 0.1) * 0.3 + 0.7;
+                // Coin body
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+                let grad3 = ctx.createRadialGradient(c.x-3, c.y-3, 2, c.x, c.y, c.r);
+                grad3.addColorStop(0, `rgba(255,255,200,${shimmer})`);
+                grad3.addColorStop(0.5, `rgba(255,215,0,${shimmer})`);
+                grad3.addColorStop(1, `rgba(200,150,0,${shimmer})`);
+                ctx.fillStyle = grad3;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // $ symbol
+                ctx.fillStyle = `rgba(100,70,0,${shimmer*0.8})`;
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$', c.x, c.y + 1);
+            }
+
+            // Draw player
+            let px = player.x, py = player.y;
+            // Body
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 10;
+            // Torso
+            ctx.fillStyle = '#e94560';
+            ctx.fillRect(px + 4, py + 10, 22, 18);
+            // Head
+            ctx.fillStyle = '#FFB5C2';
+            ctx.beginPath();
+            ctx.arc(px + 15, py + 8, 10, 0, Math.PI * 2);
+            ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#333';
+            ctx.fillRect(px + 10, py + 6, 4, 4);
+            ctx.fillRect(px + 18, py + 6, 4, 4);
+            // Legs
+            ctx.fillStyle = '#2c3e50';
+            let legOffset = Math.sin(Date.now() / 100) * 3;
+            if (player.onGround && Math.abs(player.vx) > 10) {
+                ctx.fillRect(px + 6, py + 28, 7, 8 + legOffset);
+                ctx.fillRect(px + 17, py + 28, 7, 8 - legOffset);
+            } else {
+                ctx.fillRect(px + 6, py + 28, 7, 8);
+                ctx.fillRect(px + 17, py + 28, 7, 8);
+            }
+            // Hat
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(px + 6, py - 2, 18, 6);
+            ctx.fillRect(px + 4, py + 2, 22, 3);
+            ctx.shadowBlur = 0;
+
+            // Particles
+            for (let p of particles) {
+                let alpha = p.life / p.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1;
+
+            ctx.restore();
+
+            // Vignette effect
+            let gradV = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.8);
+            gradV.addColorStop(0, 'rgba(0,0,0,0)');
+            gradV.addColorStop(1, 'rgba(0,0,0,0.25)');
+            ctx.fillStyle = gradV;
+            ctx.fillRect(0, 0, W, H);
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            let dt = (timestamp - lastTime) / 1000;
+            if (dt > 0.1) dt = 0.016;
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Input Handlers ---
+        function keydownHandler(e) {
+            const key = e.key;
+            if (key === 'ArrowLeft' || key === 'a' || key === 'A') { keys.left = true; e.preventDefault(); }
+            if (key === 'ArrowRight' || key === 'd' || key === 'D') { keys.right = true; e.preventDefault(); }
+            if (key === 'ArrowUp' || key === 'w' || key === 'W' || key === ' ') { 
+                keys.jump = true; 
+                jumpPressed = true;
+                e.preventDefault(); 
+            }
+        }
+
+        function keyupHandler(e) {
+            const key = e.key;
+            if (key === 'ArrowLeft' || key === 'a' || key === 'A') { keys.left = false; e.preventDefault(); }
+            if (key === 'ArrowRight' || key === 'd' || key === 'D') { keys.right = false; e.preventDefault(); }
+            if (key === 'ArrowUp' || key === 'w' || key === 'W' || key === ' ') { 
+                keys.jump = false; 
+                e.preventDefault(); 
+            }
+        }
+
+        function restartHandler(e) {
+            if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                document.removeEventListener('keydown', restartHandler);
+                playMenuSelect();
+                resetGame();
+            }
+        }
+
+        // Touch controls for mobile
+        let touchStartX = 0, touchStartY = 0;
+        function touchStartHandler(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            // Jump on tap
+            jumpPressed = true;
+            keys.jump = true;
+        }
+        function touchMoveHandler(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            if (dx < -20) { keys.left = true; keys.right = false; }
+            else if (dx > 20) { keys.right = true; keys.left = false; }
+            else { keys.left = false; keys.right = false; }
+        }
+        function touchEndHandler(e) {
+            e.preventDefault();
+            keys.left = false;
+            keys.right = false;
+            keys.jump = false;
+        }
+
+        // --- Start Button ---
+        startBtn.addEventListener('click', () => {
+            playMenuSelect();
+            initAudio();
+            resetGame();
+        });
+
+        // Keyboard listeners
+        document.addEventListener('keydown', keydownHandler);
+        document.addEventListener('keyup', keyupHandler);
+
+        // Touch listeners
+        canvas.addEventListener('touchstart', touchStartHandler, { passive: false });
+        canvas.addEventListener('touchmove', touchMoveHandler, { passive: false });
+        canvas.addEventListener('touchend', touchEndHandler, { passive: false });
+
+        // Prevent context menu on long press
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Initialize game world for menu display
+        generatePlatforms();
+        generateCoins();
+
+        // Start game loop
+        requestAnimationFrame(gameLoop);
+    })();
+</script>
+</body>
+</html>

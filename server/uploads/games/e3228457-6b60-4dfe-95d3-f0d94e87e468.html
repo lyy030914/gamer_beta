@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Aim Trainer Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background: #0a0a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 90vw;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            background: #111122;
+            border-radius: 20px;
+            box-shadow: 0 0 60px rgba(0, 150, 255, 0.15);
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            pointer-events: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ccd;
+            letter-spacing: 0.5px;
+        }
+        #hud div {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        #hud .label {
+            opacity: 0.6;
+            font-weight: 400;
+        }
+        #hud .value {
+            color: #fff;
+            min-width: 30px;
+        }
+        #hud .score-val { color: #ffdd44; }
+        #hud .timer-val { color: #66ddff; }
+        #hud .lives-val { color: #ff6b6b; }
+        #hud .mult-val { color: #ffaa44; }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(5,5,20,0.8);
+            backdrop-filter: blur(6px);
+            pointer-events: auto;
+            transition: opacity 0.3s;
+            padding: 20px;
+        }
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay h1 {
+            font-size: 3rem;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(100,200,255,0.3);
+            margin-bottom: 0.2rem;
+            font-weight: 800;
+        }
+        #overlay h2 {
+            font-size: 1.8rem;
+            color: #ffdd44;
+            margin-bottom: 0.5rem;
+        }
+        #overlay p {
+            color: #aab;
+            font-size: 1.1rem;
+            margin: 6px 0;
+            max-width: 400px;
+            text-align: center;
+            line-height: 1.5;
+        }
+        #overlay .stats {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 16px 28px;
+            margin: 12px 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 30px;
+            text-align: left;
+        }
+        #overlay .stats span {
+            color: #ddd;
+        }
+        #overlay .stats .num {
+            color: #fff;
+            font-weight: 700;
+            float: right;
+        }
+        #overlay button {
+            pointer-events: auto;
+            background: linear-gradient(135deg, #4488ff, #6644ff);
+            border: none;
+            color: white;
+            font-size: 1.4rem;
+            font-weight: 700;
+            padding: 14px 48px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 16px;
+            box-shadow: 0 8px 30px rgba(68,136,255,0.3);
+            transition: transform 0.15s, box-shadow 0.2s;
+            letter-spacing: 1px;
+        }
+        #overlay button:hover {
+            transform: scale(1.04);
+            box-shadow: 0 12px 40px rgba(68,136,255,0.5);
+        }
+        #overlay button:active {
+            transform: scale(0.96);
+        }
+        .small {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+        @media (max-width: 600px) {
+            #hud { font-size: 0.85rem; padding: 8px 12px; }
+            #overlay h1 { font-size: 2.2rem; }
+            #overlay h2 { font-size: 1.4rem; }
+            #overlay button { font-size: 1.1rem; padding: 12px 32px; }
+            #overlay .stats { padding: 12px 18px; gap: 4px 16px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div id="hud">
+            <div><span class="label">SCORE</span> <span class="value score-val" id="scoreDisplay">0</span></div>
+            <div><span class="label">MULT</span> <span class="value mult-val" id="multDisplay">1x</span></div>
+            <div><span class="label">⏱</span> <span class="value timer-val" id="timerDisplay">30</span></div>
+            <div><span class="label">❤️</span> <span class="value lives-val" id="livesDisplay">3</span></div>
+        </div>
+        <div id="overlay">
+            <h1 id="titleText">🎯 AIM TRAINER PRO</h1>
+            <p id="subText">Click targets as fast as you can!<br>Build combos, beat your high score.</p>
+            <div class="stats hidden" id="statsBox">
+                <span>Score <span class="num" id="finalScore">0</span></span>
+                <span>Accuracy <span class="num" id="finalAccuracy">0%</span></span>
+                <span>Hits <span class="num" id="finalHits">0</span></span>
+                <span>Misses <span class="num" id="finalMisses">0</span></span>
+            </div>
+            <button id="startBtn">▶ PLAY</button>
+            <p class="small" id="hintText">Click targets before they vanish • 30 seconds</p>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('gameContainer');
+
+    // UI elements
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const multDisplay = document.getElementById('multDisplay');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const livesDisplay = document.getElementById('livesDisplay');
+    const overlay = document.getElementById('overlay');
+    const titleText = document.getElementById('titleText');
+    const subText = document.getElementById('subText');
+    const startBtn = document.getElementById('startBtn');
+    const hintText = document.getElementById('hintText');
+    const statsBox = document.getElementById('statsBox');
+    const finalScore = document.getElementById('finalScore');
+    const finalAccuracy = document.getElementById('finalAccuracy');
+    const finalHits = document.getElementById('finalHits');
+    const finalMisses = document.getElementById('finalMisses');
+
+    // Game state
+    const STATE = { MENU:0, PLAYING:1, GAMEOVER:2 };
+    let gameState = STATE.MENU;
+    let score = 0;
+    let lives = 3;
+    let timeLeft = 30;
+    let multiplier = 1;
+    let combo = 0;
+    let hits = 0;
+    let misses = 0;
+    let totalClicks = 0;
+    let gameTime = 0;
+    let lastTime = 0;
+    let difficulty = 1;
+    let spawnTimer = 0;
+    let spawnInterval = 1.2;
+
+    // Targets
+    let targets = [];
+    const MAX_TARGETS = 8;
+    let targetIdCounter = 0;
+
+    // Particles
+    let particles = [];
+
+    // Audio context
+    let audioCtx = null;
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+    function playTone(freq, duration, type='sine', volume=0.15) {
+        try {
+            initAudio();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {}
+    }
+    function playHit() { playTone(880, 0.1, 'sine', 0.12); setTimeout(()=>playTone(1200,0.08,'sine',0.08),60); }
+    function playMiss() { playTone(300, 0.2, 'sawtooth', 0.1); }
+    function playLose() { playTone(200, 0.3, 'sawtooth', 0.15); setTimeout(()=>playTone(150,0.4,'sawtooth',0.12),200); }
+    function playStart() { playTone(600,0.1); setTimeout(()=>playTone(800,0.1),100); setTimeout(()=>playTone(1000,0.15),200); }
+
+    // Resize canvas
+    function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Helper: random between
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+    function randInt(min, max) { return Math.floor(rand(min, max+1)); }
+
+    // Target class
+    class Target {
+        constructor(x, y, radius, lifetime) {
+            this.id = targetIdCounter++;
+            this.x = x;
+            this.y = y;
+            this.maxRadius = radius;
+            this.radius = 0;
+            this.lifetime = lifetime;
+            this.age = 0;
+            this.alive = true;
+            this.growTime = 0.15;
+            this.shrinkTime = lifetime * 0.3;
+            this.growing = true;
+            this.hit = false;
+            this.color = `hsl(${randInt(180,300)}, 80%, 60%)`;
+            this.glowColor = `hsla(${randInt(180,300)}, 80%, 70%, 0.3)`;
+        }
+
+        update(dt) {
+            if (!this.alive) return;
+            this.age += dt;
+            if (this.growing) {
+                this.radius = Math.min(this.maxRadius, this.maxRadius * (this.age / this.growTime));
+                if (this.age >= this.growTime) {
+                    this.growing = false;
+                }
+            } else {
+                // after grow, wait then shrink
+                const shrinkStart = this.lifetime - this.shrinkTime;
+                if (this.age > shrinkStart) {
+                    const t = (this.age - shrinkStart) / this.shrinkTime;
+                    this.radius = this.maxRadius * (1 - t * 0.8);
+                    if (this.age >= this.lifetime) {
+                        this.alive = false;
+                        return true; // expired
+                    }
+                }
+            }
+            return false;
+        }
+
+        draw(ctx) {
+            if (!this.alive) return;
+            const r = Math.max(0, this.radius);
+            // Glow
+            ctx.shadowColor = this.glowColor;
+            ctx.shadowBlur = 20;
+            // Outer ring
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r + 4, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.fill();
+            // Main circle
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            // Inner highlight
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(this.x - r*0.2, this.y - r*0.2, r*0.3, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fill();
+            // Border
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+            ctx.stroke();
+            // Crosshair dot
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        contains(px, py) {
+            const dx = this.x - px;
+            const dy = this.y - py;
+            return (dx*dx + dy*dy) <= (this.radius * this.radius);
+        }
+    }
+
+    // Particle
+    class Particle {
+        constructor(x, y, color, speed, size, life) {
+            this.x = x;
+            this.y = y;
+            const angle = rand(0, Math.PI*2);
+            const spd = rand(speed*0.5, speed);
+            this.vx = Math.cos(angle) * spd;
+            this.vy = Math.sin(angle) * spd;
+            this.size = rand(size*0.5, size);
+            this.life = life;
+            this.maxLife = life;
+            this.color = color;
+            this.alive = true;
+            this.gravity = 60;
+        }
+        update(dt) {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vy += this.gravity * dt;
+            this.life -= dt;
+            if (this.life <= 0) this.alive = false;
+        }
+        draw(ctx) {
+            const alpha = Math.max(0, this.life / this.maxLife);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = this.color;
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * (0.5 + 0.5 * alpha), 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    // Spawn particles for hit
+    function spawnHitParticles(x, y, color) {
+        for (let i = 0; i < 20; i++) {
+            particles.push(new Particle(x, y, color, rand(100, 250), rand(3, 7), rand(0.3, 0.8)));
+        }
+        // extra sparkles
+        for (let i = 0; i < 8; i++) {
+            particles.push(new Particle(x, y, '#ffffff', rand(80, 180), rand(2, 4), rand(0.2, 0.5)));
+        }
+    }
+
+    function spawnMissParticles(x, y) {
+        for (let i = 0; i < 10; i++) {
+            particles.push(new Particle(x, y, '#ff4444', rand(60, 150), rand(3, 6), rand(0.3, 0.7)));
+        }
+    }
+
+    // Spawn a target
+    function spawnTarget() {
+        const margin = 40;
+        const w = canvas.width;
+        const h = canvas.height;
+        if (w < 100 || h < 100) return;
+        const x = rand(margin, w - margin);
+        const y = rand(margin + 50, h - margin); // avoid HUD
+        // radius scales with difficulty
+        const baseRadius = 30;
+        const minRadius = 14;
+        const radius = Math.max(minRadius, baseRadius - difficulty * 2.5);
+        const lifetime = rand(1.2, 2.4) - difficulty * 0.08;
+        const finalLife = Math.max(0.6, lifetime);
+        targets.push(new Target(x, y, radius, finalLife));
+    }
+
+    // Reset game
+    function resetGame() {
+        score = 0;
+        lives = 3;
+        timeLeft = 30;
+        multiplier = 1;
+        combo = 0;
+        hits = 0;
+        misses = 0;
+        totalClicks = 0;
+        gameTime = 0;
+        difficulty = 1;
+        spawnTimer = 0;
+        spawnInterval = 1.2;
+        targets = [];
+        particles = [];
+        targetIdCounter = 0;
+        updateHUD();
+    }
+
+    // Update HUD
+    function updateHUD() {
+        scoreDisplay.textContent = score;
+        multDisplay.textContent = multiplier + 'x';
+        timerDisplay.textContent = Math.ceil(timeLeft);
+        livesDisplay.textContent = lives;
+    }
+
+    // Show game over
+    function showGameOver() {
+        gameState = STATE.GAMEOVER;
+        overlay.classList.remove('hidden');
+        titleText.textContent = '💀 GAME OVER';
+        const accuracy = totalClicks > 0 ? Math.round((hits / totalClicks) * 100) : 0;
+        finalScore.textContent = score;
+        finalAccuracy.textContent = accuracy + '%';
+        finalHits.textContent = hits;
+        finalMisses.textContent = misses;
+        statsBox.classList.remove('hidden');
+        subText.textContent = 'Try again to beat your score!';
+        startBtn.textContent = '🔄 RETRY';
+        hintText.textContent = 'Click to start';
+        playLose();
+    }
+
+    // Show menu
+    function showMenu() {
+        gameState = STATE.MENU;
+        overlay.classList.remove('hidden');
+        statsBox.classList.add('hidden');
+        titleText.textContent = '🎯 AIM TRAINER PRO';
+        subText.textContent = 'Click targets as fast as you can!\nBuild combos, beat your high score.';
+        startBtn.textContent = '▶ PLAY';
+        hintText.textContent = 'Click targets before they vanish • 30 seconds';
+    }
+
+    // Start game
+    function startGame() {
+        initAudio();
+        resetGame();
+        overlay.classList.add('hidden');
+        gameState = STATE.PLAYING;
+        lastTime = performance.now();
+        playStart();
+    }
+
+    // Handle click / tap
+    function handleClick(clientX, clientY) {
+        if (gameState === STATE.MENU || gameState === STATE.GAMEOVER) {
+            startGame();
+            return;
+        }
+        if (gameState !== STATE.PLAYING) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+
+        totalClicks++;
+
+        // Check hit on targets (iterate from front to back for topmost)
+        let hitTarget = null;
+        for (let i = targets.length - 1; i >= 0; i--) {
+            const t = targets[i];
+            if (t.alive && t.contains(x, y)) {
+                hitTarget = t;
+                break;
+            }
+        }
+
+        if (hitTarget) {
+            // Hit!
+            hitTarget.alive = false;
+            hitTarget.hit = true;
+            hits++;
+            combo++;
+            if (combo >= 3) multiplier = Math.min(5, 1 + Math.floor(combo / 3));
+            else multiplier = 1;
+            const points = Math.round(10 * multiplier);
+            score += points;
+            spawnHitParticles(hitTarget.x, hitTarget.y, hitTarget.color);
+            playHit();
+            difficulty += 0.04;
+            // adjust spawn interval
+            spawnInterval = Math.max(0.35, 1.2 - difficulty * 0.06);
+            updateHUD();
+        } else {
+            // Miss
+            misses++;
+            combo = 0;
+            multiplier = 1;
+            lives--;
+            spawnMissParticles(x, y);
+            playMiss();
+            updateHUD();
+            if (lives <= 0) {
+                showGameOver();
+                return;
+            }
+        }
+    }
+
+    // Mouse event
+    canvas.addEventListener('click', (e) => {
+        handleClick(e.clientX, e.clientY);
+    });
+    // Touch event
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        handleClick(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    // Game loop
+    function gameLoop(timestamp) {
+        const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
+        lastTime = timestamp;
+
+        if (gameState === STATE.PLAYING) {
+            // Update timer
+            timeLeft -= dt;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                // Win condition: time ran out with lives
+                showGameOver();
+                updateHUD();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Spawn targets
+            spawnTimer += dt;
+            if (spawnTimer >= spawnInterval && targets.length < MAX_TARGETS) {
+                spawnTarget();
+                spawnTimer = 0;
+                // sometimes spawn extra
+                if (difficulty > 3 && Math.random() < 0.2) {
+                    spawnTarget();
+                }
+            }
+
+            // Update targets
+            for (let i = targets.length - 1; i >= 0; i--) {
+                const t = targets[i];
+                const expired = t.update(dt);
+                if (expired && !t.hit) {
+                    // target expired without being hit
+                    misses++;
+                    combo = 0;
+                    multiplier = 1;
+                    lives--;
+                    spawnMissParticles(t.x, t.y);
+                    playMiss();
+                    updateHUD();
+                    if (lives <= 0) {
+                        showGameOver();
+                        requestAnimationFrame(gameLoop);
+                        return;
+                    }
+                }
+                if (!t.alive) {
+                    targets.splice(i, 1);
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update(dt);
+                if (!particles[i].alive) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Difficulty scaling
+            difficulty += dt * 0.02;
+            spawnInterval = Math.max(0.35, 1.2 - difficulty * 0.06);
+            updateHUD();
+        }
+
+        // Draw everything
+        draw();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        const gridSize = 40;
+        for (let x = 0; x < canvas.width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Draw targets
+        for (const t of targets) {
+            t.draw(ctx);
+        }
+
+        // Draw particles
+        for (const p of particles) {
+            p.draw(ctx);
+        }
+
+        // Crosshair cursor (cosmetic)
+        const rect = canvas.getBoundingClientRect();
+        // only if playing
+        if (gameState === STATE.PLAYING) {
+            // We'll draw a subtle crosshair at center as fallback
+            const cx = canvas.width/2, cy = canvas.height/2;
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 40, 0, Math.PI*2);
+            ctx.stroke();
+        }
+
+        // Vignette
+        const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width*0.3, canvas.width/2, canvas.height/2, canvas.width*0.7);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.3)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    // Start loop
+    showMenu();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+
+    // Handle resize
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+    });
+})();
+</script>
+</body>
+</html>

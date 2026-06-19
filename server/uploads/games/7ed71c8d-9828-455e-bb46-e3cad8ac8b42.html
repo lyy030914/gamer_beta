@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Memory Match</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(145deg, #f0e6d3 0%, #d9c8b2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 10px;
+        }
+        #gameContainer {
+            background: #f7efe2;
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15), inset 0 -2px 4px rgba(0,0,0,0.05);
+            max-width: 600px;
+            width: 100%;
+            position: relative;
+        }
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 8px 15px 8px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        #stats {
+            display: flex;
+            gap: 20px;
+            font-weight: 600;
+            color: #5a4a3a;
+            font-size: 1.1rem;
+        }
+        #stats span {
+            background: #e6d7c0;
+            padding: 6px 14px;
+            border-radius: 30px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+        #resetBtn {
+            background: #c9b69e;
+            border: none;
+            color: #3d3228;
+            font-weight: bold;
+            font-size: 1rem;
+            padding: 8px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #a08d78, 0 6px 10px rgba(0,0,0,0.1);
+            transition: all 0.08s ease;
+            touch-action: manipulation;
+        }
+        #resetBtn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #a08d78, 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #canvasWrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1/1;
+            background: #e6d7c0;
+            border-radius: 20px;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.08);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+            touch-action: manipulation;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.4);
+            border-radius: 20px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        #overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #overlay h1 {
+            color: white;
+            font-size: 2.8rem;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        #overlay p {
+            color: #f0e6d3;
+            font-size: 1.3rem;
+            margin-bottom: 25px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        #overlay button {
+            background: #ffe484;
+            border: none;
+            color: #3d3228;
+            font-weight: bold;
+            font-size: 1.4rem;
+            padding: 14px 40px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #c7a84b, 0 10px 20px rgba(0,0,0,0.2);
+            transition: all 0.08s ease;
+            touch-action: manipulation;
+        }
+        #overlay button:active {
+            transform: translateY(6px);
+            box-shadow: 0 2px 0 #c7a84b, 0 6px 12px rgba(0,0,0,0.2);
+        }
+        #winMessage {
+            display: none;
+        }
+        #winMessage.show {
+            display: block;
+        }
+        #startMessage.show {
+            display: block;
+        }
+        #startMessage {
+            display: block;
+        }
+        @media (max-width: 480px) {
+            #gameContainer {
+                padding: 12px;
+            }
+            #stats {
+                font-size: 0.9rem;
+                gap: 10px;
+            }
+            #stats span {
+                padding: 4px 10px;
+            }
+            #resetBtn {
+                font-size: 0.85rem;
+                padding: 6px 14px;
+            }
+            #overlay h1 {
+                font-size: 2rem;
+            }
+            #overlay p {
+                font-size: 1rem;
+            }
+            #overlay button {
+                font-size: 1.1rem;
+                padding: 12px 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <div id="header">
+        <div id="stats">
+            <span id="movesDisplay">Moves: 0</span>
+            <span id="timerDisplay">Time: 0s</span>
+        </div>
+        <button id="resetBtn">↻ New Game</button>
+    </div>
+    <div id="canvasWrapper">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        <div id="overlay">
+            <div id="startMessage">
+                <h1>🧠 Memory Match</h1>
+                <p>Flip cards to find pairs!</p>
+                <button id="startBtn">▶ Start Game</button>
+            </div>
+            <div id="winMessage">
+                <h1>🎉 You Win!</h1>
+                <p id="finalStats">Moves: 0  Time: 0s</p>
+                <button id="restartBtn">↻ Play Again</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function(){
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvasWrapper');
+        const movesSpan = document.getElementById('movesDisplay');
+        const timerSpan = document.getElementById('timerDisplay');
+        const overlay = document.getElementById('overlay');
+        const startMessage = document.getElementById('startMessage');
+        const winMessage = document.getElementById('winMessage');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // --- Game constants ---
+        const GRID_SIZE = 4;
+        const TOTAL_CARDS = 16;
+        const PAIRS = 8;
+
+        // Emoji symbols for cards
+        const SYMBOLS = ['🍎','🍌','🍒','🍇','🍊','🍋','🍉','🍓'];
+
+        // --- Game state ---
+        let cards = [];
+        let flippedIndices = []; // indices of currently flipped cards (max 2)
+        let matchedPairs = 0;
+        let moves = 0;
+        let timerSeconds = 0;
+        let timerInterval = null;
+        let isGameActive = false;
+        let isProcessing = false; // prevent clicks during flip back delay
+        let flipBackTimeout = null;
+        let animationId = null;
+
+        // Particle system
+        let particles = [];
+
+        // Card dimensions (will be recalculated on resize)
+        let cardW = 100, cardH = 100, gap = 10, offsetX = 0, offsetY = 0;
+
+        // Audio context
+        let audioCtx = null;
+
+        // --- Responsive sizing ---
+        function resizeCanvas() {
+            const rect = wrapper.getBoundingClientRect();
+            const size = Math.floor(rect.width);
+            canvas.width = size;
+            canvas.height = size;
+            // Recalculate card layout
+            const totalGap = (GRID_SIZE + 1) * gap;
+            cardW = (canvas.width - totalGap) / GRID_SIZE;
+            cardH = (canvas.height - totalGap) / GRID_SIZE;
+            offsetX = gap;
+            offsetY = gap;
+        }
+
+        // --- Audio helpers ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playTone(freq, duration, type = 'sine', volume = 0.15) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) { /* silent fail */ }
+        }
+
+        function playFlipSound() {
+            playTone(600, 0.1, 'sine', 0.1);
+        }
+
+        function playMatchSound() {
+            playTone(880, 0.15, 'sine', 0.12);
+            setTimeout(() => playTone(1100, 0.15, 'sine', 0.12), 100);
+        }
+
+        function playWinSound() {
+            const notes = [523, 659, 784, 1047];
+            notes.forEach((freq, i) => {
+                setTimeout(() => playTone(freq, 0.2, 'sine', 0.12), i * 150);
+            });
+        }
+
+        // --- Particle system ---
+        function createParticles(x, y, color, count = 20) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 4;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1,
+                    life: 1.0,
+                    decay: 0.015 + Math.random() * 0.02,
+                    size: 4 + Math.random() * 8,
+                    color: color,
+                });
+            }
+        }
+
+        function createMatchParticles(card) {
+            const cx = card.x + cardW/2;
+            const cy = card.y + cardH/2;
+            const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6b9d', '#c084fc'];
+            for (let i = 0; i < 30; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 5;
+                particles.push({
+                    x: cx,
+                    y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1.5,
+                    life: 1.0,
+                    decay: 0.012 + Math.random() * 0.02,
+                    size: 5 + Math.random() * 10,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.05; // gravity
+                p.life -= p.decay;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles() {
+            for (const p of particles) {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        // --- Card generation ---
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function generateCards() {
+            const symbols = [];
+            for (let i = 0; i < PAIRS; i++) {
+                symbols.push(SYMBOLS[i], SYMBOLS[i]);
+            }
+            shuffleArray(symbols);
+
+            cards = [];
+            for (let row = 0; row < GRID_SIZE; row++) {
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    const idx = row * GRID_SIZE + col;
+                    cards.push({
+                        symbol: symbols[idx],
+                        matched: false,
+                        flipped: false,
+                        flipProgress: 0, // 0 = face down, 1 = face up (for animation)
+                        row: row,
+                        col: col,
+                        x: 0,
+                        y: 0,
+                    });
+                }
+            }
+            updateCardPositions();
+        }
+
+        function updateCardPositions() {
+            for (const card of cards) {
+                card.x = offsetX + card.col * (cardW + gap);
+                card.y = offsetY + card.row * (cardH + gap);
+            }
+        }
+
+        // --- Game logic ---
+        function startGame() {
+            // Reset state
+            if (flipBackTimeout) {
+                clearTimeout(flipBackTimeout);
+                flipBackTimeout = null;
+            }
+            flippedIndices = [];
+            matchedPairs = 0;
+            moves = 0;
+            timerSeconds = 0;
+            isGameActive = true;
+            isProcessing = false;
+            particles = [];
+            updateUI();
+
+            // Stop any previous timer
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            // Start timer
+            timerInterval = setInterval(() => {
+                if (isGameActive) {
+                    timerSeconds++;
+                    updateUI();
+                }
+            }, 1000);
+
+            generateCards();
+            // Ensure all cards start face down
+            for (const card of cards) {
+                card.flipped = false;
+                card.flipProgress = 0;
+                card.matched = false;
+            }
+
+            overlay.classList.remove('show');
+            startMessage.classList.remove('show');
+            winMessage.classList.remove('show');
+            // Force overlay hidden
+            overlay.style.display = 'none';
+            // Re-enable overlay for future use
+            setTimeout(() => { overlay.style.display = 'flex'; }, 50);
+        }
+
+        function resetGame() {
+            if (flipBackTimeout) {
+                clearTimeout(flipBackTimeout);
+                flipBackTimeout = null;
+            }
+            flippedIndices = [];
+            isProcessing = false;
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            isGameActive = false;
+            moves = 0;
+            timerSeconds = 0;
+            particles = [];
+            updateUI();
+            generateCards();
+            for (const card of cards) {
+                card.flipped = false;
+                card.flipProgress = 0;
+                card.matched = false;
+            }
+            overlay.classList.remove('show');
+            startMessage.classList.add('show');
+            winMessage.classList.remove('show');
+            overlay.style.display = 'flex';
+            overlay.classList.add('show');
+        }
+
+        function handleCardClick(index) {
+            if (!isGameActive || isProcessing) return;
+            const card = cards[index];
+            if (card.matched || card.flipped) return;
+            if (flippedIndices.length >= 2) return;
+
+            // Flip the card
+            card.flipped = true;
+            card.flipProgress = 1;
+            flippedIndices.push(index);
+            playFlipSound();
+
+            // If this is the first card of the pair, just return
+            if (flippedIndices.length === 1) {
+                return;
+            }
+
+            // Second card flipped: count a move
+            moves++;
+            updateUI();
+
+            const idx1 = flippedIndices[0];
+            const idx2 = flippedIndices[1];
+            const card1 = cards[idx1];
+            const card2 = cards[idx2];
+
+            if (card1.symbol === card2.symbol) {
+                // Match!
+                card1.matched = true;
+                card2.matched = true;
+                matchedPairs++;
+                playMatchSound();
+                createMatchParticles(card1);
+                createMatchParticles(card2);
+                flippedIndices = [];
+                updateUI();
+
+                if (matchedPairs === PAIRS) {
+                    // Win!
+                    isGameActive = false;
+                    if (timerInterval) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                    }
+                    playWinSound();
+                    // Show win overlay
+                    document.getElementById('finalStats').textContent = `Moves: ${moves}  Time: ${timerSeconds}s`;
+                    winMessage.classList.add('show');
+                    startMessage.classList.remove('show');
+                    overlay.style.display = 'flex';
+                    overlay.classList.add('show');
+                    // Celebration particles
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => {
+                            const cx = Math.random() * canvas.width;
+                            const cy = Math.random() * canvas.height;
+                            createParticles(cx, cy, '#ffd93d', 25);
+                        }, i * 200);
+                    }
+                }
+            } else {
+                // No match: flip back after delay
+                isProcessing = true;
+                flipBackTimeout = setTimeout(() => {
+                    card1.flipped = false;
+                    card1.flipProgress = 0;
+                    card2.flipped = false;
+                    card2.flipProgress = 0;
+                    flippedIndices = [];
+                    isProcessing = false;
+                    flipBackTimeout = null;
+                }, 800);
+            }
+        }
+
+        function updateUI() {
+            movesSpan.textContent = `Moves: ${moves}`;
+            timerSpan.textContent = `Time: ${timerSeconds}s`;
+        }
+
+        // --- Drawing ---
+        function drawCard(card) {
+            const x = card.x;
+            const y = card.y;
+            const w = cardW;
+            const h = cardH;
+            const radius = 12;
+
+            // Shadow
+            ctx.shadowColor = 'rgba(0,0,0,0.15)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 4;
+
+            // Card background
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, radius);
+            ctx.fillStyle = card.matched ? '#b8e0b8' : (card.flipped ? '#fff8e7' : '#b0a0d0');
+            ctx.fill();
+
+            // Reset shadow for drawing
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Border
+            ctx.strokeStyle = card.matched ? '#7aa87a' : (card.flipped ? '#d4c4a0' : '#8a7ab0');
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw content
+            if (card.matched) {
+                // Matched: show symbol with checkmark style
+                ctx.font = `bold ${Math.floor(w * 0.45)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#3a6a3a';
+                ctx.fillText(card.symbol, x + w/2, y + h/2);
+            } else if (card.flipped) {
+                // Face up: show symbol
+                ctx.font = `bold ${Math.floor(w * 0.5)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#3d3228';
+                ctx.fillText(card.symbol, x + w/2, y + h/2);
+            } else {
+                // Face down: draw pattern (stars / question marks)
+                ctx.font = `${Math.floor(w * 0.4)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#5a4a7a';
+                ctx.fillText('❓', x + w/2, y + h/2);
+                // Small decorative dots
+                ctx.fillStyle = '#7a6a9a';
+                for (let i = 0; i < 4; i++) {
+                    const dx = x + 10 + (i % 2) * (w - 20);
+                    const dy = y + 10 + Math.floor(i/2) * (h - 20);
+                    ctx.beginPath();
+                    ctx.arc(dx, dy, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Highlight on face-up cards
+            if (card.flipped && !card.matched) {
+                ctx.fillStyle = 'rgba(255,255,200,0.15)';
+                ctx.beginPath();
+                ctx.roundRect(x + 2, y + 2, w - 4, h/2 - 2, radius);
+                ctx.fill();
+            }
+        }
+
+        // RoundRect polyfill for canvas
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii) {
+                const r = typeof radii === 'number' ? radii : (radii || 0);
+                this.moveTo(x + r, y);
+                this.lineTo(x + w - r, y);
+                this.quadraticCurveTo(x + w, y, x + w, y + r);
+                this.lineTo(x + w, y + h - r);
+                this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                this.lineTo(x + r, y + h);
+                this.quadraticCurveTo(x, y + h, x, y + h - r);
+                this.lineTo(x, y + r);
+                this.quadraticCurveTo(x, y, x + r, y);
+                this.closePath();
+                return this;
+            };
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background grid pattern
+            ctx.fillStyle = '#e6d7c0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw cards
+            for (const card of cards) {
+                drawCard(card);
+            }
+
+            // Draw particles on top
+            drawParticles();
+
+            // Draw border
+            ctx.strokeStyle = '#c9b69e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // --- Game loop ---
+        function gameLoop() {
+            updateParticles();
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Input handling ---
+        function getCardIndexFromPos(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (clientX - rect.left) * scaleX;
+            const y = (clientY - rect.top) * scaleY;
+
+            for (let i = 0; i < cards.length; i++) {
+                const card = cards[i];
+                if (x >= card.x && x <= card.x + cardW &&
+                    y >= card.y && y <= card.y + cardH) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function onPointerDown(e) {
+            e.preventDefault();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            if (clientX === undefined) return;
+
+            const idx = getCardIndexFromPos(clientX, clientY);
+            if (idx >= 0) {
+                handleCardClick(idx);
+            }
+        }
+
+        // --- Event listeners ---
+        canvas.addEventListener('mousedown', onPointerDown);
+        canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+
+        // Buttons
+        startBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            initAudio();
+            startGame();
+        });
+        restartBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            initAudio();
+            startGame();
+        });
+        resetBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            initAudio();
+            if (isGameActive) {
+                startGame(); // reset while playing
+            } else {
+                resetGame();
+                startGame();
+            }
+        });
+
+        // Resize handling
+        function handleResize() {
+            resizeCanvas();
+            updateCardPositions();
+        }
+        window.addEventListener('resize', handleResize);
+
+        // --- Initialization ---
+        function init() {
+            resizeCanvas();
+            generateCards();
+            // Show start overlay
+            overlay.style.display = 'flex';
+            overlay.classList.add('show');
+            startMessage.classList.add('show');
+            winMessage.classList.remove('show');
+            isGameActive = false;
+            updateUI();
+            gameLoop();
+        }
+
+        init();
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (timerInterval) clearInterval(timerInterval);
+            if (animationId) cancelAnimationFrame(animationId);
+            if (flipBackTimeout) clearTimeout(flipBackTimeout);
+        });
+
+    })();
+</script>
+</body>
+</html>
