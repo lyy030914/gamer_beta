@@ -216,7 +216,15 @@ gamer_beta/
 | POST | /api/assets/upload | Bearer | 上传素材（multipart, field: `file`） |
 | DELETE | /api/assets/:id | Bearer | 删除素材 |
 
-### 5.6 POST /api/games/generate
+### 5.6 GitHub 联通
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | /api/auth/github | 否 | 重定向到 GitHub OAuth 授权页 |
+| GET | /api/auth/github/callback | 否 | OAuth 回调，创建/绑定账号，重定向前端 |
+| POST | /api/games/:id/push-github | Bearer | 推送游戏 HTML 到 GitHub 仓库（需 GitHub 登录） |
+
+### 5.7 POST /api/games/generate
 
 **请求：**
 ```json
@@ -295,6 +303,29 @@ Orchestrator（总协调器）
 | /assets | Assets.vue | 素材库（上传/管理） | 是 |
 
 ### 主要功能
+
+- **主页**：封面、标题、作者、标签、播放量、时间、分页、删除按钮（仅作者可见）
+- **游玩**：`srcdoc` 内联渲染游戏 HTML，无跨域限制
+- **创建**：6 个快捷提示词、多轮对话、右侧实时预览、Agent 步骤展示、自动填充标题/标签、支持图片上传
+- **素材库**：拖拽上传、画廊网格、大图预览、复制 URL、删除
+- **安全**：JWT 认证、bcrypt 密码哈希、文件类型校验、删除验证作者身份
+
+### GitHub 联通
+
+| 功能 | 说明 |
+|------|------|
+| GitHub OAuth 登录 | `/api/auth/github` → GitHub 授权 → 自动创建/绑定账号 |
+| 推送游戏到 GitHub | `/api/games/:id/push-github` → 自动创建仓库 → 提交 HTML → 返回 GitHub Pages URL |
+| Token 存储 | `github_token` 字段，用于后续 API 操作 |
+
+**配置：**
+```env
+GITHUB_CLIENT_ID=Ov23li...
+GITHUB_CLIENT_SECRET=9b67f...
+FRONTEND_URL=http://localhost:5173
+```
+
+在 [GitHub OAuth Apps](https://github.com/settings/developers) 创建应用，Callback URL 设为 `http://localhost:3000/api/auth/github/callback`。登录后游戏详情页出现 "Push to GitHub" 按钮，一键部署到 GitHub Pages。
 
 - **主页**：封面、标题、作者、标签、播放量、时间、分页、删除按钮（仅作者可见）
 - **游玩**：`srcdoc` 内联渲染游戏 HTML，无跨域限制
