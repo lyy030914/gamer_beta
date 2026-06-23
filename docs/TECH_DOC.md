@@ -208,6 +208,8 @@ gamer_beta/
 | POST | /api/upload/game | Bearer | 上传游戏文件 |
 | POST | /api/upload/file | Bearer | 通用文件上传 |
 
+| GET | /api/games/tags | 否 | 获取所有标签列表（用于筛选） |
+
 ### 5.5 素材库
 
 | 方法 | 路径 | 认证 | 说明 |
