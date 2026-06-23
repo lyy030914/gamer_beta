@@ -38,6 +38,12 @@
         <div class="detail-actions">
           <button @click="playGame" class="btn btn-primary btn-lg">Play Now</button>
           <button
+            v-if="auth.isLoggedIn"
+            @click="toggleFav"
+            class="btn-fav"
+            :class="{ faved: isFav }"
+          >{{ isFav ? '❤️' : '🤍' }}</button>
+          <button
             v-if="auth.user && auth.user.id === game.author?.id"
             @click="pushToGithub"
             :disabled="pushingGithub"
@@ -87,16 +93,24 @@ const game = ref(null)
 const loading = ref(true)
 const deleteTarget = ref(null)
 const pushingGithub = ref(false)
+const isFav = ref(false)
 
 onMounted(async () => {
   try {
     game.value = await gamesStore.fetchGame(route.params.id)
-  } catch (e) {
-    game.value = null
-  } finally {
-    loading.value = false
-  }
+    if (auth.isLoggedIn) {
+      const r = await api.get(`/favorites/check/${route.params.id}`)
+      isFav.value = r.data.favorited
+    }
+  } catch (e) { game.value = null } finally { loading.value = false }
 })
+
+async function toggleFav() {
+  try {
+    const r = await api.post(`/favorites/${game.value.id}`)
+    isFav.value = r.data.favorited
+  } catch {}
+}
 
 function playGame() {
   router.push(`/play/${game.value.id}`)
@@ -291,6 +305,9 @@ function formatCount(count) {
 }
 .btn-github-outline:hover { background: rgba(63,185,80,0.1); border-color: #3fb950; }
 .btn-github-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-fav { background: none; border: none; cursor: pointer; font-size: 22px; padding: 4px 8px; transition: transform 0.2s; }
+.btn-fav:hover { transform: scale(1.2); }
 
 .btn-danger-outline {
   background: transparent;

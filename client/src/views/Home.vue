@@ -7,9 +7,14 @@
 
     <div class="tag-filter" v-if="allTags.length">
       <button
-        :class="['tag-chip', { active: !activeTag }]"
-        @click="selectTag('')"
+        :class="['tag-chip', { active: !activeTag && !showFavorites }]"
+        @click="selectTag(''); showFavorites = false"
       >All</button>
+      <button
+        v-if="auth.isLoggedIn"
+        :class="['tag-chip', 'fav-chip', { active: showFavorites }]"
+        @click="showFavorites = !showFavorites; if(showFavorites){activeTag=''; loadFavorites()}else{selectTag('')}"
+      >❤️ My Favorites</button>
       <button
         v-for="tag in allTags"
         :key="tag"
@@ -43,12 +48,21 @@
         <div class="game-info">
           <div class="game-info-top">
             <h3 class="game-title" @click="goToDetail(game.id)">{{ game.title }}</h3>
-            <button
-              v-if="auth.user && auth.user.id === game.author?.id"
-              class="delete-btn"
-              @click.stop="confirmDelete(game)"
-              title="Delete game"
-            >&#x1F5D1;</button>
+            <div class="card-actions">
+              <button
+                v-if="auth.isLoggedIn"
+                class="fav-btn"
+                :class="{ faved: isFaved(game.id) }"
+                @click.stop="toggleFav(game.id)"
+                :title="isFaved(game.id) ? 'Remove from favorites' : 'Add to favorites'"
+              >{{ isFaved(game.id) ? '❤️' : '🤍' }}</button>
+              <button
+                v-if="auth.user && auth.user.id === game.author?.id"
+                class="delete-btn"
+                @click.stop="confirmDelete(game)"
+                title="Delete game"
+              >&#x1F5D1;</button>
+            </div>
           </div>
           <p class="game-desc">{{ game.description || 'No description' }}</p>
           <div class="game-tags" v-if="game.tags && game.tags.length">
@@ -104,6 +118,8 @@ const pageSize = 20
 const deleteTarget = ref(null)
 const allTags = ref([])
 const activeTag = ref('')
+const showFavorites = ref(false)
+const favedIds = ref(new Set())
 
 onMounted(() => {
   fetchTags()
@@ -115,9 +131,28 @@ async function fetchTags() {
 }
 
 function selectTag(tag) {
+  showFavorites.value = false
   activeTag.value = tag
   page.value = 1
   gamesStore.fetchGames({ page: 1, pageSize, tag: tag || undefined })
+}
+
+function isFaved(gameId) { return favedIds.value.has(gameId) }
+async function toggleFav(gameId) {
+  try {
+    const res = await api.post(`/favorites/${gameId}`)
+    if (res.data.favorited) favedIds.value.add(gameId)
+    else favedIds.value.delete(gameId)
+  } catch {}
+}
+
+async function loadFavorites() {
+  try {
+    const res = await api.get('/favorites', { params: { pageSize: 50 } })
+    gamesStore.games = res.data.games
+    gamesStore.total = res.data.total
+    favedIds.value = new Set(res.data.games.map(g => g.id))
+  } catch {}
 }
 
 function confirmDelete(game) {
@@ -179,6 +214,11 @@ function formatCount(count) {
 .tag-chip.active {
   background: var(--primary); border-color: var(--primary); color: #fff;
 }
+.fav-chip.active { background: #ef4444; border-color: #ef4444; }
+
+.card-actions { display: flex; align-items: center; gap: 4px; }
+.fav-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px 4px; transition: transform 0.2s; }
+.fav-btn:hover { transform: scale(1.2); }
 
 .game-card {
   cursor: pointer;
