@@ -171,6 +171,15 @@ gamer_beta/
 | size | INTEGER | 文件大小（字节） |
 | created_at | DATETIME | 上传时间 |
 
+### favorites 表
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| user_id | INTEGER FK | 用户 → users.id |
+| game_id | INTEGER FK | 游戏 → games.id |
+| created_at | DATETIME | 收藏时间 |
+| UNIQUE(user_id, game_id) | | 同一游戏不重复收藏 |
+
 ---
 
 ## 五、API 接口文档
@@ -194,8 +203,10 @@ gamer_beta/
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| GET | /api/games | 可选 | 列表（支持 `?page=&pageSize=&tag=`） |
+| GET | /api/games | 可选 | 列表（支持 `?page=&pageSize=&tag=&search=`） |
 | GET | /api/games/:id | 否 | 详情（含 meta，播放量 +1） |
+| GET | /api/games/tags | 否 | 获取所有标签（用于筛选） |
+| GET | /api/games/stats | 否 | 平台统计（游戏数/总播放/用户数/Top5） |
 | POST | /api/games | Bearer | 手动创建 |
 | POST | /api/games/generate | Bearer | **AI 生成**（Multi-Agent） |
 | DELETE | /api/games/:id | Bearer | 删除（仅作者） |
@@ -218,7 +229,15 @@ gamer_beta/
 | POST | /api/assets/upload | Bearer | 上传素材（multipart, field: `file`） |
 | DELETE | /api/assets/:id | Bearer | 删除素材 |
 
-### 5.6 GitHub 联通
+### 5.6 收藏夹
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | /api/favorites | Bearer | 收藏列表 |
+| POST | /api/favorites/:gameId | Bearer | 切换收藏（add/remove toggle） |
+| GET | /api/favorites/check/:gameId | Bearer | 查询是否已收藏 |
+
+### 5.7 GitHub 联通
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
