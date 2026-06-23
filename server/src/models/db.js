@@ -57,4 +57,9 @@ db.exec(`
   );
 `);
 
+try { db.exec(`ALTER TABLE users ADD COLUMN github_id TEXT`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'email'`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN github_username TEXT`); } catch (e) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN github_token TEXT`); } catch (e) {}
+
 module.exports = db;

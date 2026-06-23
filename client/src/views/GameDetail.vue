@@ -39,6 +39,12 @@
           <button @click="playGame" class="btn btn-primary btn-lg">Play Now</button>
           <button
             v-if="auth.user && auth.user.id === game.author?.id"
+            @click="pushToGithub"
+            :disabled="pushingGithub"
+            class="btn btn-github-outline"
+          >{{ pushingGithub ? 'Pushing...' : 'Push to GitHub' }}</button>
+          <button
+            v-if="auth.user && auth.user.id === game.author?.id"
             @click="deleteTarget = game"
             class="btn btn-danger-outline"
           >Delete Game</button>
@@ -71,6 +77,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useGamesStore } from '../stores/games'
 import { useAuthStore } from '../stores/auth'
+import api from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -79,6 +86,7 @@ const auth = useAuthStore()
 const game = ref(null)
 const loading = ref(true)
 const deleteTarget = ref(null)
+const pushingGithub = ref(false)
 
 onMounted(async () => {
   try {
@@ -92,6 +100,21 @@ onMounted(async () => {
 
 function playGame() {
   router.push(`/play/${game.value.id}`)
+}
+
+async function pushToGithub() {
+  const repo = prompt('Repository name (default: your-username.github.io):')
+  if (repo === null) return
+  pushingGithub.value = true
+  try {
+    const res = await api.post(`/games/${game.value.id}/push-github`, { repo: repo || undefined })
+    alert('Pushed! ' + res.data.url)
+    window.open(res.data.url, '_blank')
+  } catch (e) {
+    alert(e.response?.data?.error || 'Push failed. Make sure you logged in with GitHub.')
+  } finally {
+    pushingGithub.value = false
+  }
 }
 
 async function handleDelete() {
@@ -259,10 +282,15 @@ function formatCount(count) {
 }
 
 .detail-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
 }
+
+.btn-github-outline {
+  background: transparent; border: 1px solid rgba(63,185,80,0.4); color: #3fb950;
+  padding: 10px 24px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-github-outline:hover { background: rgba(63,185,80,0.1); border-color: #3fb950; }
+.btn-github-outline:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-danger-outline {
   background: transparent;

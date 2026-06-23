@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Quick Aim Trainer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            background: #0b0e1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        .game-container {
+            position: relative;
+            width: 800px;
+            max-width: 96vw;
+            aspect-ratio: 4 / 3;
+            background: #141824;
+            border-radius: 24px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            overflow: hidden;
+            border: 2px solid #2a324a;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+            color: #f0f4ff;
+            font-weight: 600;
+            font-size: 1.2rem;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .ui-overlay span { pointer-events: none; }
+        .score-label { font-size: 1.4rem; }
+        .timer-label { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+        .highscore-label { font-size: 0.9rem; opacity: 0.7; }
+
+        /* Screen overlays */
+        .screen-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(11, 14, 26, 0.85);
+            backdrop-filter: blur(6px);
+            color: #e8edff;
+            text-align: center;
+            padding: 20px;
+            transition: opacity 0.3s ease;
+            pointer-events: auto;
+        }
+        .screen-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .screen-overlay h1 {
+            font-size: 3.2rem;
+            font-weight: 700;
+            margin-bottom: 0.3em;
+            background: linear-gradient(135deg, #ff6b6b, #ffa94d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+        }
+        .screen-overlay h2 {
+            font-size: 2.2rem;
+            margin-bottom: 0.3em;
+            color: #ffd43b;
+        }
+        .screen-overlay p {
+            font-size: 1.2rem;
+            max-width: 400px;
+            line-height: 1.5;
+            margin: 0.6em 0;
+            opacity: 0.9;
+        }
+        .screen-overlay .sub {
+            font-size: 1rem;
+            opacity: 0.6;
+            margin-top: 0.2em;
+        }
+        .btn {
+            margin-top: 1.5em;
+            padding: 14px 48px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 60px;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 8px 24px rgba(238,90,36,0.3);
+            transition: transform 0.15s, box-shadow 0.15s;
+            letter-spacing: 0.5px;
+        }
+        .btn:hover { transform: scale(1.04); box-shadow: 0 12px 32px rgba(238,90,36,0.5); }
+        .btn:active { transform: scale(0.96); }
+        .btn-secondary {
+            background: linear-gradient(135deg, #4dabf7, #339af0);
+            box-shadow: 0 8px 24px rgba(51,154,240,0.3);
+        }
+        .btn-secondary:hover { box-shadow: 0 12px 32px rgba(51,154,240,0.5); }
+        .final-score {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #ffd43b;
+            margin: 0.2em 0;
+        }
+        .miss-penalty { color: #ff8787; font-size: 0.9rem; }
+        @media (max-width: 500px) {
+            .screen-overlay h1 { font-size: 2.2rem; }
+            .screen-overlay h2 { font-size: 1.6rem; }
+            .btn { padding: 12px 32px; font-size: 1.2rem; }
+            .ui-overlay { padding: 10px 16px; font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container" id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div class="ui-overlay" id="uiOverlay">
+        <div>
+            <span class="score-label">🎯 <span id="scoreDisplay">0</span></span>
+            <span class="highscore-label" style="margin-left:12px;">🏆 <span id="highScoreDisplay">0</span></span>
+        </div>
+        <div>
+            <span class="timer-label" id="timerDisplay">30</span><span style="font-size:0.8rem;opacity:0.6;">s</span>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div class="screen-overlay" id="startScreen">
+        <h1>🎯 Quick Aim</h1>
+        <p>Click the red targets before they disappear!<br>Be quick &amp; precise — misses cost points.</p>
+        <p style="font-size:1rem;margin-top:0.8em;">⏱️ 30 seconds · Targets get faster!</p>
+        <button class="btn" id="startBtn">▶ PLAY</button>
+        <div class="sub">High Score: <span id="startHighScore">0</span></div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div class="screen-overlay hidden" id="gameOverScreen">
+        <h2>⏱️ Time's Up!</h2>
+        <div class="final-score" id="finalScore">0</div>
+        <p id="finalMessage">Great effort!</p>
+        <p class="miss-penalty" id="missPenaltyDisplay"></p>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+            <button class="btn" id="restartBtn">🔄 Try Again</button>
+        </div>
+        <div class="sub">Best: <span id="gameOverHighScore">0</span></div>
+    </div>
+</div>
+<script>
+    (function(){
+        "use strict";
+
+        // ----- CANVAS SETUP -----
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+
+        // Responsive canvas sizing
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            // Keep 4:3 aspect ratio inside container
+            let w = rect.width;
+            let h = w * (3/4);
+            if (h > rect.height) {
+                h = rect.height;
+                w = h * (4/3);
+            }
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            // logical size always 800x600
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ----- DOM refs -----
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScore = document.getElementById('finalScore');
+        const finalMessage = document.getElementById('finalMessage');
+        const missPenaltyDisplay = document.getElementById('missPenaltyDisplay');
+        const gameOverHighScore = document.getElementById('gameOverHighScore');
+        const startHighScore = document.getElementById('startHighScore');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // ----- GAME STATE -----
+        const W = 800, H = 600;
+        const GAME_DURATION = 30; // seconds
+        const BASE_SPAWN_INTERVAL = 1.2; // seconds
+        const MIN_SPAWN_INTERVAL = 0.3;
+        const TARGET_LIFETIME = 1.8; // seconds
+        const TARGET_RADIUS = 24; // outer
+        const HIT_RADIUS = 14; // inner hit zone
+        const MISS_PENALTY = 1;
+        const HIT_SCORE = 10;
+
+        let state = 'start'; // 'start', 'playing', 'gameover'
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('quickAimHighScore')) || 0;
+        let timeLeft = GAME_DURATION;
+        let targets = [];
+        let particles = [];
+        let spawnTimer = 0;
+        let spawnInterval = BASE_SPAWN_INTERVAL;
+        let gameLoopId = null;
+        let lastTimestamp = 0;
+        let elapsedTime = 0;
+        let totalMisses = 0;
+        let totalHits = 0;
+        let missedClicks = 0; // clicks on empty space
+        let gameActive = false;
+
+        // ----- AUDIO (Web Audio) -----
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        function playHitSound() {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                osc.start(audioCtx.currentTime);
+                osc.stop(audioCtx.currentTime + 0.15);
+            } catch(e) { /* ignore */ }
+        }
+        function playMissSound() {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+                osc.start(audioCtx.currentTime);
+                osc.stop(audioCtx.currentTime + 0.12);
+            } catch(e) { /* ignore */ }
+        }
+        function playGameOverSound() {
+            try {
+                initAudio();
+                const notes = [523, 659, 784, 1047];
+                notes.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.12);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime + i * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.12 + 0.2);
+                    osc.start(audioCtx.currentTime + i * 0.12);
+                    osc.stop(audioCtx.currentTime + i * 0.12 + 0.2);
+                });
+            } catch(e) { /* ignore */ }
+        }
+
+        // ----- TARGET CLASS -----
+        class Target {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = TARGET_RADIUS;
+                this.hitRadius = HIT_RADIUS;
+                this.life = TARGET_LIFETIME;
+                this.maxLife = TARGET_LIFETIME;
+                this.alive = true;
+                this.hit = false;
+                this.scale = 0;
+                this.targetScale = 1;
+                this.pulsePhase = Math.random() * Math.PI * 2;
+            }
+            update(dt) {
+                if (!this.alive) return;
+                this.life -= dt;
+                // scale animation
+                this.scale += (this.targetScale - this.scale) * 10 * dt;
+                if (this.life <= 0) {
+                    this.alive = false;
+                }
+                this.pulsePhase += dt * 6;
+            }
+            draw(ctx) {
+                if (!this.alive) return;
+                const s = this.scale;
+                const r = this.radius * s;
+                const hr = this.hitRadius * s;
+                // pulse glow
+                const pulse = 0.1 * Math.sin(this.pulsePhase) + 0.9;
+                const alpha = Math.min(1, (this.life / this.maxLife) * 2);
+                // outer glow
+                ctx.save();
+                ctx.shadowColor = 'rgba(255, 80, 80, 0.5)';
+                ctx.shadowBlur = 20 * pulse;
+                // main red circle
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r);
+                grad.addColorStop(0, '#ff6b6b');
+                grad.addColorStop(0.8, '#e03131');
+                grad.addColorStop(1, '#c92a2a');
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, r, 0, Math.PI*2);
+                ctx.fillStyle = grad;
+                ctx.globalAlpha = alpha;
+                ctx.fill();
+                // white hit zone
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, hr, 0, Math.PI*2);
+                ctx.fillStyle = '#f8f9fa';
+                ctx.globalAlpha = alpha * 0.9;
+                ctx.fill();
+                // inner dot
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, hr * 0.35, 0, Math.PI*2);
+                ctx.fillStyle = '#212529';
+                ctx.globalAlpha = alpha * 0.7;
+                ctx.fill();
+                ctx.restore();
+            }
+            contains(px, py) {
+                if (!this.alive) return false;
+                const dx = px - this.x;
+                const dy = py - this.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                return dist <= this.hitRadius * this.scale;
+            }
+        }
+
+        // ----- PARTICLE SYSTEM -----
+        class Particle {
+            constructor(x, y, color, speed, life) {
+                this.x = x;
+                this.y = y;
+                const angle = Math.random() * Math.PI * 2;
+                const spd = speed * (0.5 + Math.random());
+                this.vx = Math.cos(angle) * spd;
+                this.vy = Math.sin(angle) * spd;
+                this.life = life || 0.6 + Math.random() * 0.4;
+                this.maxLife = this.life;
+                this.color = color || '#ff6b6b';
+                this.size = 3 + Math.random() * 5;
+                this.alive = true;
+            }
+            update(dt) {
+                this.x += this.vx * dt * 60;
+                this.y += this.vy * dt * 60;
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+                this.life -= dt;
+                if (this.life <= 0) this.alive = false;
+            }
+            draw(ctx) {
+                const alpha = Math.max(0, this.life / this.maxLife);
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function spawnParticles(x, y, color, count, speed, life) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color, speed || 3, life));
+            }
+        }
+
+        // ----- SPAWN TARGETS -----
+        function spawnTarget() {
+            const margin = 50;
+            const x = margin + Math.random() * (W - 2*margin);
+            const y = margin + Math.random() * (H - 2*margin);
+            const t = new Target(x, y);
+            targets.push(t);
+        }
+
+        // ----- GAME LOGIC -----
+        function updateGame(dt) {
+            if (!gameActive) return;
+
+            // Update timer
+            timeLeft -= dt;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                endGame();
+                return;
+            }
+
+            // Update spawn interval (increases difficulty)
+            const progress = 1 - (timeLeft / GAME_DURATION);
+            spawnInterval = BASE_SPAWN_INTERVAL - progress * (BASE_SPAWN_INTERVAL - MIN_SPAWN_INTERVAL);
+            spawnInterval = Math.max(MIN_SPAWN_INTERVAL, spawnInterval);
+
+            spawnTimer += dt;
+            if (spawnTimer >= spawnInterval) {
+                spawnTimer -= spawnInterval;
+                spawnTarget();
+                // sometimes spawn two when fast
+                if (spawnInterval < 0.5 && Math.random() < 0.3) {
+                    spawnTarget();
+                }
+            }
+
+            // Update targets
+            for (let i = targets.length-1; i >= 0; i--) {
+                const t = targets[i];
+                t.update(dt);
+                if (!t.alive) {
+                    // target expired (missed)
+                    totalMisses++;
+                    targets.splice(i, 1);
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length-1; i >= 0; i--) {
+                particles[i].update(dt);
+                if (!particles[i].alive) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Clamp targets count for performance
+            if (targets.length > 30) {
+                targets.splice(0, targets.length - 30);
+            }
+            if (particles.length > 200) {
+                particles.splice(0, particles.length - 200);
+            }
+
+            // Update UI
+            scoreDisplay.textContent = Math.floor(score);
+            timerDisplay.textContent = Math.ceil(timeLeft);
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, W, H);
+
+            // Background grid
+            ctx.fillStyle = '#141824';
+            ctx.fillRect(0, 0, W, H);
+            ctx.strokeStyle = '#1f2740';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < W; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+            }
+            for (let y = 0; y < H; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(W, y);
+                ctx.stroke();
+            }
+
+            // Draw targets
+            for (const t of targets) {
+                t.draw(ctx);
+            }
+
+            // Draw particles
+            for (const p of particles) {
+                p.draw(ctx);
+            }
+
+            // Draw crosshair hint? not needed
+        }
+
+        // ----- INPUT HANDLING -----
+        function handleCanvasClick(e) {
+            if (!gameActive) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+                e.preventDefault();
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            const x = (clientX - rect.left) * scaleX;
+            const y = (clientY - rect.top) * scaleY;
+
+            if (x < 0 || x > W || y < 0 || y > H) return;
+
+            // Check hit on targets (reverse order for top-most)
+            let hit = false;
+            for (let i = targets.length-1; i >= 0; i--) {
+                const t = targets[i];
+                if (t.contains(x, y)) {
+                    // HIT!
+                    t.alive = false;
+                    score += HIT_SCORE;
+                    totalHits++;
+                    hit = true;
+                    // particles
+                    spawnParticles(t.x, t.y, '#ff6b6b', 12, 4, 0.7);
+                    spawnParticles(t.x, t.y, '#ffd43b', 6, 2, 0.5);
+                    playHitSound();
+                    // remove target
+                    targets.splice(i, 1);
+                    break;
+                }
+            }
+
+            if (!hit) {
+                // Miss penalty
+                score = Math.max(0, score - MISS_PENALTY);
+                missedClicks++;
+                playMissSound();
+                // small visual feedback
+                spawnParticles(x, y, '#868e96', 4, 1.5, 0.3);
+            }
+
+            // Update score display
+            scoreDisplay.textContent = Math.floor(score);
+        }
+
+        // ----- GAME STATE MANAGEMENT -----
+        function startGame() {
+            // Reset
+            score = 0;
+            timeLeft = GAME_DURATION;
+            targets = [];
+            particles = [];
+            spawnTimer = 0;
+            spawnInterval = BASE_SPAWN_INTERVAL;
+            totalMisses = 0;
+            totalHits = 0;
+            missedClicks = 0;
+            gameActive = true;
+            state = 'playing';
+
+            // Hide overlays
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+
+            // UI
+            scoreDisplay.textContent = '0';
+            timerDisplay.textContent = GAME_DURATION;
+            highScoreDisplay.textContent = highScore;
+
+            // Spawn first target quickly
+            spawnTimer = 0.5;
+        }
+
+        function endGame() {
+            gameActive = false;
+            state = 'gameover';
+            playGameOverSound();
+
+            // Update high score
+            const finalScoreVal = Math.floor(score);
+            if (finalScoreVal > highScore) {
+                highScore = finalScoreVal;
+                localStorage.setItem('quickAimHighScore', highScore);
+            }
+            highScoreDisplay.textContent = highScore;
+
+            // Show game over screen
+            finalScore.textContent = finalScoreVal;
+            gameOverHighScore.textContent = highScore;
+
+            // Message based on performance
+            const hitRate = totalHits + totalMisses > 0 ? (totalHits / (totalHits + totalMisses)) * 100 : 0;
+            let msg = 'Nice shooting!';
+            if (finalScoreVal > 80) msg = '🔥 Sharpshooter!';
+            else if (finalScoreVal > 50) msg = '👍 Good aim!';
+            else if (finalScoreVal > 20) msg = 'Keep practicing!';
+            else msg = 'Focus & try again!';
+            finalMessage.textContent = msg;
+            missPenaltyDisplay.textContent = `Misses: ${missedClicks} · Targets missed: ${totalMisses}`;
+
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // ----- GAME LOOP -----
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
+            lastTimestamp = timestamp;
+
+            if (state === 'playing') {
+                updateGame(dt);
+            }
+            drawGame();
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // ----- EVENT LISTENERS -----
+        canvas.addEventListener('click', handleCanvasClick);
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            handleCanvasClick(e);
+        }, { passive: false });
+
+        startBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            initAudio();
+            startGame();
+        });
+        restartBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            startGame();
+        });
+
+        // Keyboard shortcut
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                if (state === 'start') {
+                    initAudio();
+                    startGame();
+                } else if (state === 'gameover') {
+                    startGame();
+                }
+            }
+        });
+
+        // ----- INIT -----
+        highScoreDisplay.textContent = highScore;
+        startHighScore.textContent = highScore;
+        gameOverHighScore.textContent = highScore;
+        startScreen.classList.remove('hidden');
+        gameOverScreen.classList.add('hidden');
+
+        // Start loop
+        gameLoopId = requestAnimationFrame(gameLoop);
+
+        // Prevent context menu
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Cleanup on page unload (optional)
+        window.addEventListener('beforeunload', function() {
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        });
+
+        // Handle resize for canvas coordinates
+        function updateCanvasSize() {
+            resizeCanvas();
+        }
+        window.addEventListener('resize', updateCanvasSize);
+    })();
+</script>
+</body>
+</html>
