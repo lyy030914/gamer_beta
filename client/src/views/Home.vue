@@ -5,6 +5,19 @@
       <p class="page-subtitle">Discover and play interactive games created by the community</p>
     </div>
 
+    <div class="home-tools">
+      <div class="search-box">
+        <input v-model="searchText" type="text" class="form-input search-input" placeholder="Search games..." @keyup.enter="doSearch" />
+        <button @click="doSearch" class="search-btn">&#x1F50D;</button>
+        <button v-if="searchText" @click="searchText=''; doSearch()" class="search-clear">&times;</button>
+      </div>
+      <div class="home-stats" v-if="stats">
+        <span>{{ stats.totalGames }} games</span>
+        <span>{{ formatCount(stats.totalPlays) }} total plays</span>
+        <span>{{ stats.totalUsers }} users</span>
+      </div>
+    </div>
+
     <div class="tag-filter" v-if="allTags.length">
       <button
         :class="['tag-chip', { active: !activeTag && !showFavorites }]"
@@ -120,14 +133,28 @@ const allTags = ref([])
 const activeTag = ref('')
 const showFavorites = ref(false)
 const favedIds = ref(new Set())
+const searchText = ref('')
+const stats = ref(null)
 
 onMounted(() => {
   fetchTags()
+  fetchStats()
   gamesStore.fetchGames({ page: page.value, pageSize })
 })
 
 async function fetchTags() {
   try { const res = await api.get('/games/tags'); allTags.value = res.data.tags } catch {}
+}
+
+async function fetchStats() {
+  try { const res = await api.get('/games/stats'); stats.value = res.data } catch {}
+}
+
+function doSearch() {
+  activeTag.value = ''
+  showFavorites.value = false
+  page.value = 1
+  gamesStore.fetchGames({ page: 1, pageSize, search: searchText.value || undefined })
 }
 
 function selectTag(tag) {
@@ -202,6 +229,38 @@ function formatCount(count) {
 </script>
 
 <style scoped>
+.home-tools {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.search-box {
+  display: flex; gap: 0; max-width: 400px; flex: 1; position: relative;
+}
+
+.search-input {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm) !important;
+  border-right: none !important;
+}
+
+.search-btn {
+  padding: 0 16px; border: 1px solid var(--border); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 16px;
+  transition: all 0.2s;
+}
+.search-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.search-clear {
+  position: absolute; right: 48px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 2px 6px;
+}
+
+.home-stats {
+  display: flex; gap: 20px; font-size: 13px; color: var(--text-muted);
+  white-space: nowrap;
+}
+.home-stats span { font-weight: 500; }
+
 .tag-filter {
   display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;
 }

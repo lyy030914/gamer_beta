@@ -4,7 +4,7 @@ const fs = require('fs');
 const { orchestrateGameGeneration } = require('../services/orchestrator');
 
 function listGames(req, res) {
-  const { page = 1, pageSize = 20, tag } = req.query;
+  const { page = 1, pageSize = 20, tag, search } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
   const limit = parseInt(pageSize);
 
@@ -20,18 +20,27 @@ function listGames(req, res) {
   const params = [];
 
   if (tag) {
-    query += ` AND ',' || g.tags || ',' LIKE ?`;
+    const clause = ` AND ',' || g.tags || ',' LIKE ?`;
+    query += clause;
     countQuery += ` AND ',' || tags || ',' LIKE ?`;
     params.push(`%,${tag},%`);
+  }
+
+  if (search) {
+    const clause = ` AND (g.title LIKE ? OR g.description LIKE ?)`;
+    query += clause;
+    countQuery += ` AND (title LIKE ? OR description LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`);
   }
 
   query += ` ORDER BY g.created_at DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const games = db.prepare(query).all(...params);
-  const { total } = db.prepare(countQuery).get(
-    ...(tag ? [`%,${tag},%`] : [])
-  );
+  const countParams = [];
+  if (tag) countParams.push(`%,${tag},%`);
+  if (search) countParams.push(`%${search}%`, `%${search}%`);
+  const { total } = db.prepare(countQuery).get(...countParams);
 
   const list = games.map(g => ({
     id: g.id,
@@ -69,6 +78,20 @@ function getAllTags(req, res) {
 
   const tags = Array.from(tagSet).sort();
   res.json({ tags });
+}
+
+function getStats(req, res) {
+  const totalGames = db.prepare("SELECT COUNT(*) as c FROM games WHERE status = 'published'").get().c;
+  const totalPlays = db.prepare("SELECT COALESCE(SUM(play_count), 0) as c FROM games WHERE status = 'published'").get().c;
+  const totalUsers = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayGames = db.prepare("SELECT COUNT(*) as c FROM games WHERE status = 'published' AND date(created_at) = ?").get(today).c;
+  const topPlayed = db.prepare("SELECT id, title, play_count, game_url FROM games WHERE status = 'published' ORDER BY play_count DESC LIMIT 5").all();
+
+  res.json({
+    totalGames, totalPlays, totalUsers, todayGames,
+    topPlayed: topPlayed.map(g => ({ id: g.id, title: g.title, playCount: g.play_count, gameUrl: g.game_url }))
+  });
 }
 
 function getGame(req, res) {
@@ -197,4 +220,4 @@ async function generateGame(req, res) {
   }
 }
 
-module.exports = { listGames, getGame, createGame, deleteGame, generateGame, getAllTags };
+module.exports = { listGames, getGame, createGame, deleteGame, generateGame, getAllTags, getStats };
