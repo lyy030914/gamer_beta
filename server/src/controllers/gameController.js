@@ -54,6 +54,23 @@ function listGames(req, res) {
   res.json({ games: list, total, page: parseInt(page), pageSize: limit });
 }
 
+function getAllTags(req, res) {
+  const rows = db.prepare(
+    "SELECT tags FROM games WHERE status = 'published' AND tags IS NOT NULL AND tags != ''"
+  ).all();
+
+  const tagSet = new Set();
+  rows.forEach(r => {
+    r.tags.split(',').forEach(t => {
+      const tag = t.trim();
+      if (tag) tagSet.add(tag);
+    });
+  });
+
+  const tags = Array.from(tagSet).sort();
+  res.json({ tags });
+}
+
 function getGame(req, res) {
   const { id } = req.params;
 
@@ -180,4 +197,4 @@ async function generateGame(req, res) {
   }
 }
 
-module.exports = { listGames, getGame, createGame, deleteGame, generateGame };
+module.exports = { listGames, getGame, createGame, deleteGame, generateGame, getAllTags };

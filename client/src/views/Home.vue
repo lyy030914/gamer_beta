@@ -5,6 +5,19 @@
       <p class="page-subtitle">Discover and play interactive games created by the community</p>
     </div>
 
+    <div class="tag-filter" v-if="allTags.length">
+      <button
+        :class="['tag-chip', { active: !activeTag }]"
+        @click="selectTag('')"
+      >All</button>
+      <button
+        v-for="tag in allTags"
+        :key="tag"
+        :class="['tag-chip', { active: activeTag === tag }]"
+        @click="selectTag(tag)"
+      >{{ tag }}</button>
+    </div>
+
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
       <p>Loading games...</p>
@@ -80,6 +93,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useGamesStore } from '../stores/games'
 import { useAuthStore } from '../stores/auth'
+import api from '../api'
 
 const gamesStore = useGamesStore()
 const auth = useAuthStore()
@@ -88,10 +102,23 @@ const { games, total, loading } = storeToRefs(gamesStore)
 const page = ref(1)
 const pageSize = 20
 const deleteTarget = ref(null)
+const allTags = ref([])
+const activeTag = ref('')
 
 onMounted(() => {
+  fetchTags()
   gamesStore.fetchGames({ page: page.value, pageSize })
 })
+
+async function fetchTags() {
+  try { const res = await api.get('/games/tags'); allTags.value = res.data.tags } catch {}
+}
+
+function selectTag(tag) {
+  activeTag.value = tag
+  page.value = 1
+  gamesStore.fetchGames({ page: 1, pageSize, tag: tag || undefined })
+}
 
 function confirmDelete(game) {
   deleteTarget.value = game
@@ -140,6 +167,19 @@ function formatCount(count) {
 </script>
 
 <style scoped>
+.tag-filter {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;
+}
+.tag-chip {
+  padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; transition: all 0.2s;
+}
+.tag-chip:hover { border-color: var(--primary); color: var(--primary); }
+.tag-chip.active {
+  background: var(--primary); border-color: var(--primary); color: #fff;
+}
+
 .game-card {
   cursor: pointer;
 }
