@@ -1,4 +1,4 @@
-const { chat } = require('./openaiClient');
+const { chat, chatWithImages } = require('./openaiClient');
 
 const SYSTEM_PROMPT = `You are a Game Designer Agent. Your job is to take a user's game idea and create a detailed game design specification.
 
@@ -19,22 +19,27 @@ Given a user's game description, output a structured game design document in JSO
 Make the game design practical and implementable as a single-page HTML5 Canvas game.
 Respond ONLY with valid JSON, no markdown code fences or additional text.`;
 
-async function designGame(userPrompt, uploadedFiles = []) {
-  const userMessage = uploadedFiles.length > 0
-    ? `User's game idea: ${userPrompt}\n\nNote: The user also uploaded ${uploadedFiles.length} reference file(s). Consider these as visual/style inspiration.`
-    : `User's game idea: ${userPrompt}`;
+async function designGame(userPrompt, imageUrls = []) {
+  let response;
 
-  const response = await chat([
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: userMessage }
-  ], { temperature: 0.8 });
+  if (imageUrls.length > 0) {
+    console.log(`[GameDesigner] Using vision mode with ${imageUrls.length} image(s)`);
+    const userText = `User's game idea: ${userPrompt}\n\nPlease use the uploaded reference images above as visual inspiration for the game's art style, color palette, character design, and overall mood.`;
+    response = await chatWithImages(SYSTEM_PROMPT, userText, imageUrls);
+  } else {
+    const userMessage = `User's game idea: ${userPrompt}`;
+    response = await chat([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userMessage }
+    ], { temperature: 0.8 });
+  }
 
   try {
     const cleanJson = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleanJson);
   } catch (e) {
-    console.error('Failed to parse Game Designer output:', e.message);
-    const fallback = {
+    console.error('[GameDesigner] Failed to parse output:', e.message);
+    return {
       title: userPrompt.slice(0, 40),
       genre: 'casual',
       description: userPrompt,
@@ -43,10 +48,9 @@ async function designGame(userPrompt, uploadedFiles = []) {
       controls: 'Keyboard and mouse',
       winCondition: 'Achieve the highest score',
       loseCondition: 'Game over when health reaches zero',
-      visualStyle: 'Colorful 2D graphics with particle effects',
-      features: ['Score tracking', 'Sound effects', 'Responsive design', 'Restart button']
+      visualStyle: 'Colorful 2D graphics',
+      features: ['Score tracking', 'Responsive design', 'Restart button']
     };
-    return fallback;
   }
 }
 

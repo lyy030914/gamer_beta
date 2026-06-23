@@ -7,19 +7,20 @@ const db = require('../models/db');
 
 const uploadsDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
 
-async function orchestrateGameGeneration(userPrompt, userId, uploadedFiles = []) {
+async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
   console.log(`[Orchestrator] Starting game generation for user ${userId}`);
   console.log(`[Orchestrator] Prompt: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? '...' : ''}"`);
+  if (imageUrls.length > 0) console.log(`[Orchestrator] Reference images: ${imageUrls.length}`);
 
   const steps = [];
 
   // Step 1: Game Designer Agent
   console.log('[Orchestrator] Step 1: Game Designer Agent - Designing game...');
-  steps.push({ agent: 'Game Designer', status: 'running', message: 'Designing game mechanics...' });
+  steps.push({ agent: 'Game Designer', status: 'running', message: imageUrls.length ? 'Analyzing images...' : 'Designing game mechanics...' });
 
   let gameDesign;
   try {
-    gameDesign = await designGame(userPrompt, uploadedFiles);
+    gameDesign = await designGame(userPrompt, imageUrls);
     steps[0].status = 'done';
     steps[0].message = `Game "${gameDesign.title}" designed (${gameDesign.genre})`;
     console.log('[Orchestrator] Game design complete:', JSON.stringify(gameDesign).slice(0, 200));
@@ -65,13 +66,15 @@ async function orchestrateGameGeneration(userPrompt, userId, uploadedFiles = [])
   console.log('[Orchestrator] Step 4: Saving to database...');
   steps.push({ agent: 'Database', status: 'running', message: 'Saving to database...' });
 
+  const coverUrl = imageUrls.length > 0 ? imageUrls[0] : '';
+
   const result = db.prepare(`
     INSERT INTO games (title, description, cover_url, game_url, tags, author_id, status)
     VALUES (?, ?, ?, ?, ?, ?, 'published')
   `).run(
     gameDesign.title,
     gameDesign.description,
-    '',
+    coverUrl,
     gameUrl,
     (gameDesign.tags || []).join(','),
     userId
@@ -90,6 +93,7 @@ async function orchestrateGameGeneration(userPrompt, userId, uploadedFiles = [])
       loseCondition: gameDesign.loseCondition,
       visualStyle: gameDesign.visualStyle,
       features: gameDesign.features || [],
+      referenceImages: imageUrls,
       generatedAt: new Date().toISOString()
     })
   );
