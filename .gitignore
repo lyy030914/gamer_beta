@@ -6,6 +6,10 @@ dist/
 *.db-wal
 uploads/games/*
 uploads/covers/*
+server/uploads/games/*
+server/uploads/covers/*
 !uploads/games/.gitkeep
 !uploads/covers/.gitkeep
+!server/uploads/games/.gitkeep
+!server/uploads/covers/.gitkeep
 .DS_Store

@@ -54,17 +54,74 @@
               <div v-else-if="msg.role === 'system'">
                 {{ msg.content }}
               </div>
-              <div v-else>{{ msg.content }}</div>
+              <div v-else>
+                {{ msg.content }}
+                <div v-if="msg.attachments && msg.attachments.length" class="message-attachments">
+                  <span
+                    v-for="attachment in msg.attachments"
+                    :key="attachment.url"
+                    class="message-attachment"
+                  >
+                    {{ attachment.kind }}: {{ attachment.originalName || attachment.filename }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="chat-input-area">
+          <div v-if="attachments.length || uploadingFiles.length" class="attachment-list">
+            <div
+              v-for="attachment in attachments"
+              :key="attachment.url"
+              class="attachment-item"
+            >
+              <span class="attachment-kind">{{ attachment.kind }}</span>
+              <span class="attachment-name">{{ attachment.originalName || attachment.filename }}</span>
+              <span class="attachment-size">{{ formatBytes(attachment.size) }}</span>
+              <button
+                class="attachment-remove"
+                @click="removeAttachment(attachment.url)"
+                :disabled="generating"
+                title="Remove attachment"
+              >
+                x
+              </button>
+            </div>
+            <div
+              v-for="file in uploadingFiles"
+              :key="file.name"
+              class="attachment-item uploading"
+            >
+              <span class="attachment-kind">upload</span>
+              <span class="attachment-name">{{ file.name }}</span>
+              <span class="attachment-size">...</span>
+            </div>
+          </div>
           <div class="chat-input-row">
+            <input
+              ref="fileInput"
+              type="file"
+              class="file-input"
+              multiple
+              accept="image/*,video/*,.txt,.md,.json,.csv,.html,.js,.css,.zip"
+              @change="handleFileSelect"
+              :disabled="generating"
+            />
+            <button
+              type="button"
+              class="attach-btn"
+              @click="openFilePicker"
+              :disabled="generating"
+              title="Attach images, videos, or files"
+            >
+              +
+            </button>
             <textarea
               v-model="inputText"
               class="chat-textarea"
-              placeholder="Describe your game idea... (e.g., 'Create a snake game where the snake grows faster each level')"
+              placeholder="Describe your game idea, or attach images, videos, and files as references..."
               rows="1"
               @keydown.enter.exact.prevent="sendMessage()"
               @input="autoResize"
@@ -73,7 +130,7 @@
             ></textarea>
             <button
               @click="sendMessage()"
-              :disabled="!inputText.trim() || generating"
+              :disabled="(!inputText.trim() && attachments.length === 0) || generating || uploadingFiles.length > 0"
               class="send-btn"
             >
               {{ generating ? '...' : '&#x27A4;' }}
@@ -166,6 +223,9 @@ const newTag = ref('')
 const publishing = ref(false)
 const chatContainer = ref(null)
 const textarea = ref(null)
+const fileInput = ref(null)
+const attachments = ref([])
+const uploadingFiles = ref([])
 
 const quickPrompts = [
   { emoji: '🐍', text: 'Create a snake game with power-ups' },
@@ -197,20 +257,77 @@ function scrollToBottom() {
   })
 }
 
+function openFilePicker() {
+  if (fileInput.value && !generating.value) {
+    fileInput.value.click()
+  }
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function removeAttachment(url) {
+  attachments.value = attachments.value.filter(attachment => attachment.url !== url)
+}
+
+async function handleFileSelect(event) {
+  const files = Array.from(event.target.files || [])
+  if (!files.length) return
+
+  uploadingFiles.value.push(...files.map(file => ({ name: file.name })))
+
+  try {
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await api.post('/upload/file', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000
+      })
+      attachments.value.push(res.data)
+    }
+  } catch (e) {
+    const errMsg = e.response?.data?.error || e.message || 'Upload failed'
+    messages.value.push({
+      role: 'system',
+      content: 'Upload error: ' + errMsg
+    })
+    scrollToBottom()
+  } finally {
+    uploadingFiles.value = []
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
 async function sendMessage(promptText) {
   const text = (promptText || inputText.value.trim())
-  if (!text || generating.value) return
+  if ((!text && attachments.value.length === 0) || generating.value || uploadingFiles.value.length > 0) return
 
-  messages.value.push({ role: 'user', content: text })
+  const selectedAttachments = attachments.value.map(attachment => ({ ...attachment }))
+  messages.value.push({
+    role: 'user',
+    content: text || 'Use the uploaded references to create a小游戏.',
+    attachments: selectedAttachments
+  })
   inputText.value = ''
+  attachments.value = []
   if (textarea.value) textarea.value.style.height = 'auto'
   scrollToBottom()
 
   generating.value = true
-  generatingMessage.value = 'AI agents are working...'
+  generatingMessage.value = selectedAttachments.length
+    ? 'Multimodal AI agents are analyzing your references...'
+    : 'AI agents are working...'
 
   try {
-    const res = await api.post('/games/generate', { prompt: text })
+    const res = await api.post('/games/generate', {
+      prompt: text || 'Create a小游戏 based on the uploaded creative references.',
+      attachments: selectedAttachments
+    })
     const { game, steps } = res.data
 
     generatedGame.value = game
@@ -316,6 +433,8 @@ function publishGame() {
 .message.user { align-self: flex-end; background: var(--primary); color: #fff; }
 .message.assistant { align-self: flex-start; background: var(--border); width: 100%; max-width: 100%; }
 .message.system { align-self: flex-start; background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.message-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.message-attachment { max-width: 100%; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.14); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Agent Steps */
 .agent-steps { margin: 4px 0; }
@@ -334,6 +453,37 @@ function publishGame() {
 /* Input */
 .chat-input-area { border-top: 1px solid var(--border); padding: 16px; }
 .chat-input-row { display: flex; align-items: flex-end; gap: 10px; }
+.file-input { display: none; }
+.attach-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); cursor: pointer;
+  font-size: 22px; line-height: 1; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0; transition: all 0.2s;
+}
+.attach-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.attach-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.attachment-list {
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+  max-height: 132px; overflow-y: auto;
+}
+.attachment-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg); font-size: 12px;
+}
+.attachment-kind {
+  min-width: 44px; padding: 2px 7px; border-radius: 6px;
+  background: rgba(99,102,241,0.16); color: var(--primary);
+  text-align: center; text-transform: uppercase; font-size: 10px; font-weight: 700;
+}
+.attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-size { color: var(--text-muted); white-space: nowrap; }
+.attachment-remove {
+  width: 22px; height: 22px; border: none; border-radius: 50%;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.attachment-remove:hover:not(:disabled) { color: #f87171; background: rgba(248,113,113,0.12); }
+.attachment-item.uploading { opacity: 0.75; }
 .chat-textarea {
   flex: 1; padding: 12px 16px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg);

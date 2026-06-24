@@ -7,7 +7,9 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
 });
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
+const BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+const SUPPORTS_IMAGE_INPUT = /(^|\.)openai\.com\/v1\/?$/i.test(BASE_URL);
 
 function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -47,6 +49,20 @@ async function chat(messages, options = {}) {
   return response.choices[0].message.content;
 }
 
+function loadTextFile(fileUrl, maxChars = 12000) {
+  const uploadsDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
+  const relativePath = fileUrl.replace(/^\/uploads\//, '');
+  const fullPath = path.join(uploadsDir, relativePath);
+
+  if (!fs.existsSync(fullPath)) {
+    console.warn(`[OpenAI] File not found: ${fullPath}`);
+    return null;
+  }
+
+  const buffer = fs.readFileSync(fullPath);
+  return buffer.toString('utf-8').slice(0, maxChars);
+}
+
 async function chatWithImages(systemPrompt, userText, imageUrls = []) {
   const userContent = [{ type: 'text', text: userText }];
 
@@ -76,4 +92,37 @@ async function chatWithImages(systemPrompt, userText, imageUrls = []) {
   return response.choices[0].message.content;
 }
 
-module.exports = { openai, chat, chatWithImages, loadImageAsBase64, MODEL };
+async function chatWithAttachments(systemPrompt, userText, attachments = []) {
+  const userContent = [{ type: 'text', text: userText }];
+
+  if (SUPPORTS_IMAGE_INPUT) {
+    for (const attachment of attachments) {
+      if (attachment.kind === 'image') {
+        const dataUri = loadImageAsBase64(attachment.url);
+        if (dataUri) {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: dataUri, detail: 'auto' }
+          });
+          console.log(`[OpenAI] Attached image: ${attachment.url} (${(dataUri.length / 1024).toFixed(0)}KB base64)`);
+        }
+      }
+    }
+  }
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: SUPPORTS_IMAGE_INPUT ? userContent : userText }
+  ];
+
+  const response = await openai.chat.completions.create({
+    model: MODEL,
+    messages,
+    temperature: 0.8,
+    max_tokens: 4096,
+  });
+
+  return response.choices[0].message.content;
+}
+
+module.exports = { openai, chat, chatWithImages, chatWithAttachments, loadImageAsBase64, loadTextFile, MODEL, SUPPORTS_IMAGE_INPUT };

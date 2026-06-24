@@ -7,20 +7,65 @@ const db = require('../models/db');
 
 const uploadsDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
 
-async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
+function normalizeAttachments(attachments = [], imageUrls = []) {
+  const fromImages = imageUrls.map(url => ({
+    url,
+    name: url.split('/').pop() || 'image',
+    type: 'image',
+    kind: 'image'
+  }));
+
+  return [...attachments, ...fromImages]
+    .map(attachment => {
+      if (typeof attachment === 'string') {
+        return {
+          url: attachment,
+          name: attachment.split('/').pop() || 'attachment',
+          type: '',
+          kind: 'file'
+        };
+      }
+
+      const type = attachment.mimetype || attachment.type || '';
+      let kind = attachment.kind;
+      if (!kind) {
+        if (type.startsWith('image/')) kind = 'image';
+        else if (type.startsWith('video/')) kind = 'video';
+        else kind = 'file';
+      }
+
+      return {
+        url: attachment.url,
+        name: attachment.originalName || attachment.filename || (attachment.url || '').split('/').pop() || 'attachment',
+        type,
+        kind
+      };
+    })
+    .filter(attachment => attachment.url);
+}
+
+async function orchestrateGameGeneration(userPrompt, userId, attachments = [], imageUrls = []) {
   console.log(`[Orchestrator] Starting game generation for user ${userId}`);
   console.log(`[Orchestrator] Prompt: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? '...' : ''}"`);
-  if (imageUrls.length > 0) console.log(`[Orchestrator] Reference images: ${imageUrls.length}`);
+  const normalizedAttachments = normalizeAttachments(attachments, imageUrls);
+  const imageAttachments = normalizedAttachments.filter(a => a.kind === 'image');
+  if (normalizedAttachments.length > 0) {
+    console.log(`[Orchestrator] Attachments: ${normalizedAttachments.length} (${imageAttachments.length} image)`);
+  }
 
   const steps = [];
 
   // Step 1: Game Designer Agent
   console.log('[Orchestrator] Step 1: Game Designer Agent - Designing game...');
-  steps.push({ agent: 'Game Designer', status: 'running', message: imageUrls.length ? 'Analyzing images...' : 'Designing game mechanics...' });
+  steps.push({
+    agent: 'Game Designer',
+    status: 'running',
+    message: normalizedAttachments.length ? 'Analyzing multimodal references...' : 'Designing game mechanics...'
+  });
 
   let gameDesign;
   try {
-    gameDesign = await designGame(userPrompt, imageUrls);
+    gameDesign = await designGame(userPrompt, normalizedAttachments);
     steps[0].status = 'done';
     steps[0].message = `Game "${gameDesign.title}" designed (${gameDesign.genre})`;
     console.log('[Orchestrator] Game design complete:', JSON.stringify(gameDesign).slice(0, 200));
@@ -36,7 +81,7 @@ async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
 
   let gameCode;
   try {
-    gameCode = await generateGameCode(gameDesign);
+    gameCode = await generateGameCode(gameDesign, normalizedAttachments);
     steps[1].status = 'done';
     steps[1].message = `Game code generated (${gameCode.length} chars)`;
     console.log(`[Orchestrator] Code generated: ${gameCode.length} chars`);
@@ -66,7 +111,7 @@ async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
   console.log('[Orchestrator] Step 4: Saving to database...');
   steps.push({ agent: 'Database', status: 'running', message: 'Saving to database...' });
 
-  const coverUrl = imageUrls.length > 0 ? imageUrls[0] : '';
+  const coverUrl = imageAttachments.length > 0 ? imageAttachments[0].url : '';
 
   const result = db.prepare(`
     INSERT INTO games (title, description, cover_url, game_url, tags, author_id, status)
@@ -92,8 +137,10 @@ async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
       winCondition: gameDesign.winCondition,
       loseCondition: gameDesign.loseCondition,
       visualStyle: gameDesign.visualStyle,
+      assetUsage: gameDesign.assetUsage,
       features: gameDesign.features || [],
-      referenceImages: imageUrls,
+      attachments: normalizedAttachments,
+      referenceImages: imageAttachments.map(a => a.url),
       generatedAt: new Date().toISOString()
     })
   );
@@ -116,6 +163,7 @@ async function orchestrateGameGeneration(userPrompt, userId, imageUrls = []) {
       winCondition: gameDesign.winCondition,
       loseCondition: gameDesign.loseCondition,
       visualStyle: gameDesign.visualStyle,
+      assetUsage: gameDesign.assetUsage,
       mechanics: gameDesign.mechanics,
     },
     steps

@@ -9,7 +9,7 @@ const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const type = file.fieldname === 'cover' ? 'covers' : 'games';
+    const type = file.fieldname === 'cover' || file.mimetype.startsWith('image/') ? 'covers' : 'games';
     cb(null, path.join(uploadDir, type));
   },
   filename: (req, file, cb) => {
@@ -67,8 +67,20 @@ router.post('/file', authMiddleware, upload.single('file'), (req, res) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
   const subdir = req.file.mimetype.startsWith('image/') ? 'covers' : 'games';
+  const kind = req.file.mimetype.startsWith('image/')
+    ? 'image'
+    : req.file.mimetype.startsWith('video/')
+      ? 'video'
+      : 'file';
   const url = `/uploads/${subdir}/${req.file.filename}`;
-  res.json({ url, filename: req.file.filename, mimetype: req.file.mimetype });
+  res.json({
+    url,
+    filename: req.file.filename,
+    originalName: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    kind
+  });
 });
 
 module.exports = router;

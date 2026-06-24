@@ -204,7 +204,7 @@ function deleteGame(req, res) {
 }
 
 async function generateGame(req, res) {
-  const { prompt, imageUrls } = req.body;
+  const { prompt, imageUrls, attachments } = req.body;
 
   if (!prompt || prompt.trim().length === 0) {
     return res.status(400).json({ error: 'Game prompt is required' });
@@ -212,7 +212,8 @@ async function generateGame(req, res) {
 
   try {
     const urls = Array.isArray(imageUrls) ? imageUrls : [];
-    const result = await orchestrateGameGeneration(prompt.trim(), req.userId, urls);
+    const creativeAttachments = Array.isArray(attachments) ? attachments : [];
+    const result = await orchestrateGameGeneration(prompt.trim(), req.userId, creativeAttachments, urls);
     res.status(201).json(result);
   } catch (e) {
     console.error('[GameController] Generation failed:', e.message);
