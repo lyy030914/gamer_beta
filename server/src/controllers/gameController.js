@@ -1,7 +1,7 @@
 const db = require('../models/db');
 const path = require('path');
 const fs = require('fs');
-const { orchestrateGameGeneration } = require('../services/orchestrator');
+const { runGameGeneration } = require('../services/gameGenGraph');
 
 function listGames(req, res) {
   const { page = 1, pageSize = 20, tag, search } = req.query;
@@ -204,7 +204,7 @@ function deleteGame(req, res) {
 }
 
 async function generateGame(req, res) {
-  const { prompt, imageUrls, attachments } = req.body;
+  const { prompt, imageUrls } = req.body;
 
   if (!prompt || prompt.trim().length === 0) {
     return res.status(400).json({ error: 'Game prompt is required' });
@@ -212,8 +212,7 @@ async function generateGame(req, res) {
 
   try {
     const urls = Array.isArray(imageUrls) ? imageUrls : [];
-    const creativeAttachments = Array.isArray(attachments) ? attachments : [];
-    const result = await orchestrateGameGeneration(prompt.trim(), req.userId, creativeAttachments, urls);
+    const result = await runGameGeneration(prompt.trim(), req.userId, urls);
     res.status(201).json(result);
   } catch (e) {
     console.error('[GameController] Generation failed:', e.message);
