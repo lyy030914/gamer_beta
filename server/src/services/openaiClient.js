@@ -44,9 +44,17 @@ async function chat(messages, options = {}) {
     messages,
     temperature: options.temperature ?? 0.7,
     max_tokens: options.max_tokens ?? 4096,
+    thinking: { type: 'disabled' },
     ...options,
   });
-  return response.choices[0].message.content;
+  return {
+    content: response.choices[0].message.content,
+    usage: response.usage ? {
+      promptTokens: response.usage.prompt_tokens || 0,
+      completionTokens: response.usage.completion_tokens || 0,
+      totalTokens: response.usage.total_tokens || 0,
+    } : null,
+  };
 }
 
 function loadTextFile(fileUrl, maxChars = 12000) {
@@ -87,9 +95,17 @@ async function chatWithImages(systemPrompt, userText, imageUrls = []) {
     messages,
     temperature: 0.8,
     max_tokens: 4096,
+    thinking: { type: 'disabled' },
   });
 
-  return response.choices[0].message.content;
+  return {
+    content: response.choices[0].message.content,
+    usage: response.usage ? {
+      promptTokens: response.usage.prompt_tokens || 0,
+      completionTokens: response.usage.completion_tokens || 0,
+      totalTokens: response.usage.total_tokens || 0,
+    } : null,
+  };
 }
 
 async function chatWithAttachments(systemPrompt, userText, attachments = []) {
@@ -120,9 +136,17 @@ async function chatWithAttachments(systemPrompt, userText, attachments = []) {
     messages,
     temperature: 0.8,
     max_tokens: 4096,
+    thinking: { type: 'disabled' },
   });
 
-  return response.choices[0].message.content;
+  return {
+    content: response.choices[0].message.content,
+    usage: response.usage ? {
+      promptTokens: response.usage.prompt_tokens || 0,
+      completionTokens: response.usage.completion_tokens || 0,
+      totalTokens: response.usage.total_tokens || 0,
+    } : null,
+  };
 }
 
 module.exports = { openai, chat, chatWithImages, chatWithAttachments, loadImageAsBase64, loadTextFile, MODEL, SUPPORTS_IMAGE_INPUT };

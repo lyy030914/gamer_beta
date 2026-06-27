@@ -85,13 +85,15 @@ async function designGame(userPrompt, attachments = []) {
   if (normalizedAttachments.length > 0) {
     console.log(`[GameDesigner] Using multimodal mode with ${normalizedAttachments.length} attachment(s), ${imageAttachments.length} image(s)`);
     const userText = `User's game idea: ${userPrompt}${attachmentContext}\n\nUse uploaded images as direct visual references. Use uploaded files and videos as auxiliary creative references for theme, mechanics, pacing, controls, and polish.`;
-    response = await chatWithAttachments(SYSTEM_PROMPT, userText, normalizedAttachments);
+    const result = await chatWithAttachments(SYSTEM_PROMPT, userText, normalizedAttachments);
+    response = result.content;
   } else {
     const userMessage = `User's game idea: ${userPrompt}`;
-    response = await chat([
+    const result = await chat([
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage }
     ], { temperature: 0.8 });
+    response = result.content;
   }
 
   try {

@@ -65,6 +65,26 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (game_id) REFERENCES games(id)
   );
+
+  CREATE TABLE IF NOT EXISTS generation_traces (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    user_prompt TEXT NOT NULL,
+    image_urls TEXT,
+    status TEXT NOT NULL DEFAULT 'started',
+    error TEXT,
+    error_category TEXT,
+    error_node TEXT,
+    game_id INTEGER,
+    game_design TEXT,
+    node_executions TEXT NOT NULL DEFAULT '[]',
+    total_duration_ms INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    retry_count INTEGER DEFAULT 0,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 try { db.exec(`ALTER TABLE users ADD COLUMN github_id TEXT`); } catch (e) {}

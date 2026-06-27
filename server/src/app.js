@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+// Polyfill global crypto for Node 18 (required by uuid v9 and langgraph internals)
+if (!globalThis.crypto) {
+  globalThis.crypto = require('crypto');
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');

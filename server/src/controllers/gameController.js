@@ -2,6 +2,7 @@ const db = require('../models/db');
 const path = require('path');
 const fs = require('fs');
 const { runGameGeneration } = require('../services/gameGenGraph');
+const { getTrace, listTraces, getFailedTraces, getTraceStats } = require('../services/traceService');
 
 function listGames(req, res) {
   const { page = 1, pageSize = 20, tag, search } = req.query;
@@ -213,11 +214,55 @@ async function generateGame(req, res) {
   try {
     const urls = Array.isArray(imageUrls) ? imageUrls : [];
     const result = await runGameGeneration(prompt.trim(), req.userId, urls);
-    res.status(201).json(result);
+    const statusCode = result.status === 'failed' ? 500 : 201;
+    res.status(statusCode).json(result);
   } catch (e) {
     console.error('[GameController] Generation failed:', e.message);
     res.status(500).json({ error: 'Game generation failed: ' + e.message });
   }
 }
 
-module.exports = { listGames, getGame, createGame, deleteGame, generateGame, getAllTags, getStats };
+// ---- Trace APIs ----
+
+function getGenerateTrace(req, res) {
+  const { traceId } = req.params;
+  const trace = getTrace(traceId);
+  if (!trace) {
+    return res.status(404).json({ error: 'Trace not found' });
+  }
+  res.json({ trace });
+}
+
+function listGenerateTraces(req, res) {
+  const { page = 1, pageSize = 20, status } = req.query;
+  const result = listTraces({
+    userId: req.userId,
+    status,
+    page: parseInt(page),
+    pageSize: parseInt(pageSize),
+  });
+  res.json(result);
+}
+
+function listFailedTraces(req, res) {
+  const { page = 1, pageSize = 20 } = req.query;
+  const result = getFailedTraces({
+    userId: req.userId,
+    page: parseInt(page),
+    pageSize: parseInt(pageSize),
+  });
+  res.json(result);
+}
+
+function getGenerateTraceStats(req, res) {
+  const stats = getTraceStats();
+  res.json({ stats });
+}
+
+module.exports = { listGames, getGame, createGame, deleteGame, generateGame, getAllTags, getStats,
+  // Trace APIs
+  getGenerateTrace,
+  listGenerateTraces,
+  listFailedTraces,
+  getGenerateTraceStats
+};

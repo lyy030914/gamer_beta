@@ -53,6 +53,27 @@
               </div>
               <div v-else-if="msg.role === 'system'">
                 {{ msg.content }}
+                <div v-if="msg.traceId" class="trace-link-row">
+                  <button class="trace-link" @click="openTrace(msg.traceId)">
+                    View generation trace
+                  </button>
+                </div>
+                <div v-if="msg.steps && msg.steps.length" class="agent-steps" style="margin-top: 10px;">
+                  <div class="agent-steps-title">Failed Pipeline</div>
+                  <div
+                    v-for="(step, si) in msg.steps"
+                    :key="si"
+                    :class="['agent-step', step.status]"
+                  >
+                    <span class="step-icon">
+                      {{ step.status === 'done' ? '✅' : step.status === 'failed' ? '❌' : '⏳' }}
+                    </span>
+                    <div class="step-info">
+                      <span class="step-agent">{{ step.agent }}</span>
+                      <span class="step-message">{{ step.message }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div v-else>
                 {{ msg.content }}
@@ -328,26 +349,44 @@ async function sendMessage(promptText) {
       prompt: text || 'Create a小游戏 based on the uploaded creative references.',
       attachments: selectedAttachments
     })
-    const { game, steps } = res.data
+    const { game, steps, status, error, traceId } = res.data
+
+    if (status === 'failed' || error) {
+      messages.value.push({
+        role: 'system',
+        content: error || 'Generation failed',
+        traceId,
+        steps
+      })
+      generatingMessage.value = ''
+      generating.value = false
+      scrollToBottom()
+      return
+    }
 
     generatedGame.value = game
-    editTitle.value = game.title || ''
-    editDesc.value = game.description || ''
-    editTags.value = game.tags || []
+    editTitle.value = game?.title || ''
+    editDesc.value = game?.description || ''
+    editTags.value = game?.tags || []
 
     messages.value.push({
       role: 'assistant',
       content: '',
       steps,
-      gameUrl: game.gameUrl
+      gameUrl: game?.gameUrl,
+      traceId
     })
-    previewGameUrl.value = game.gameUrl
+    previewGameUrl.value = game?.gameUrl
     generatingMessage.value = ''
   } catch (e) {
-    const errMsg = e.response?.data?.error || e.message || 'Generation failed'
+    const errData = e.response?.data
+    const errMsg = errData?.error || e.message || 'Generation failed'
+    const errTraceId = errData?.traceId || null
+
     messages.value.push({
       role: 'system',
-      content: 'Error: ' + errMsg
+      content: errTraceId ? `Generation failed [Trace: ${errTraceId.slice(0, 8)}...]: ` + errMsg : errMsg,
+      traceId: errTraceId
     })
     generatingMessage.value = ''
   } finally {
@@ -379,6 +418,10 @@ function addTag() {
 function publishGame() {
   window.open('/play/' + generatedGame.value.id, '_blank')
   router.push('/game/' + generatedGame.value.id)
+}
+
+function openTrace(traceId) {
+  window.open(`/trace/${traceId}`, '_blank')
 }
 </script>
 
@@ -499,6 +542,14 @@ function publishGame() {
 }
 .send-btn:disabled { background: var(--border); cursor: not-allowed; }
 .send-btn:not(:disabled):hover { background: var(--primary-hover); }
+
+.trace-link-row { margin-top: 10px; }
+.trace-link {
+  background: none; border: 1px solid rgba(248,113,113,0.4); border-radius: 6px;
+  color: #f87171; cursor: pointer; font-size: 12px; padding: 4px 12px;
+  transition: all 0.2s;
+}
+.trace-link:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.6); }
 
 /* Preview */
 .preview-area {

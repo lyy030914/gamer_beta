@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const uuidv4 = () => crypto.randomUUID();
 const { authMiddleware } = require('../middleware/auth');
 
 const uploadDir = path.resolve(process.env.UPLOAD_DIR || './uploads');

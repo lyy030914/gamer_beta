@@ -174,12 +174,12 @@ Broken HTML:
 ${code}
 `;
 
-  let repaired = await chat([
+  const result = await chat([
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: repairPrompt }
   ], { temperature: 0.2, max_tokens: 8192 });
 
-  repaired = cleanHtml(repaired);
+  let repaired = cleanHtml(result.content);
   validateHtmlGame(repaired);
   return repaired;
 }
@@ -239,12 +239,12 @@ Generate a complete, playable HTML5 game implementing this design.
 Make sure it's FUN, POLISHED, and FULLY FUNCTIONAL.
 The game should be immediately enjoyable and have good replay value.`;
 
-  const response = await chat([
+  const result = await chat([
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: designPrompt }
   ], { temperature: 0.7, max_tokens: 8192 });
 
-  let code = cleanHtml(response);
+  let code = cleanHtml(result.content);
 
   try {
     validateHtmlGame(code);

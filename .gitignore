@@ -13,3 +13,4 @@ server/uploads/covers/*
 !server/uploads/games/.gitkeep
 !server/uploads/covers/.gitkeep
 .DS_Store
+err.txt
